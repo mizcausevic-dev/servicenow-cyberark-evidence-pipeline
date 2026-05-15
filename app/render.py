@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from html import escape
 
 from app.services.evidence_pipeline_service import build_service
@@ -17,63 +16,207 @@ def _verdict_class(verdict: str) -> str:
     return {"healthy": "healthy", "watch": "watch", "critical": "critical"}[verdict]
 
 
-def _mini_chart() -> str:
+def _nav_link(href: str, label: str, current: str, key: str) -> str:
+    state = "active" if current == key else ""
+    return f'<a class="nav-link {state}" href="{href}">{escape(label)}</a>'
+
+
+def _status_badge(verdict: str) -> str:
+    return f'<span class="badge {_verdict_class(verdict)}">{escape(verdict.upper())}</span>'
+
+
+def _kpi_card(label: str, value: str, note: str, progress: int, tone: str = "violet") -> str:
+    return f"""
+    <article class="kpi-card">
+      <div class="kpi-top">
+        <span class="eyebrow">{escape(label)}</span>
+        <span class="arrow">→</span>
+      </div>
+      <div class="kpi-value">{escape(value)}</div>
+      <div class="progress-track"><div class="progress-fill {tone}" style="width:{progress}%"></div></div>
+      <p class="kpi-note">{escape(note)}</p>
+    </article>
+    """
+
+
+def _component_card(component: dict) -> str:
+    status_class = "hot" if component["status"] == "watch" else "good"
+    return f"""
+    <article class="component-card">
+      <div class="component-icon">{escape(component["name"][0])}</div>
+      <div class="component-copy">
+        <div class="component-top">
+          <strong>{escape(component["name"])}</strong>
+          <span class="component-cpu {status_class}">{component["cpu"]}% CPU</span>
+        </div>
+        <div class="progress-track slim"><div class="progress-fill {status_class}" style="width:{component["cpu"]}%"></div></div>
+        <div class="component-metrics">
+          <span>{component["ramGb"]}GB RAM</span>
+          <span>{component["networkMb"]}MB/S NET</span>
+        </div>
+      </div>
+      <span class="live-dot"></span>
+    </article>
+    """
+
+
+def _line_chart() -> str:
     series = SERVICE.sync_velocity()
-    max_bundles = max(item["bundles"] for item in series)
-    bars = []
-    for item in series:
-        height = max(20, round((item["bundles"] / max_bundles) * 108))
-        bars.append(
+    max_syncs = max(item["syncs"] for item in series)
+    points = []
+    labels = []
+    base_x = 34
+    step = 132
+    for index, item in enumerate(series):
+        x = base_x + (index * step)
+        y = 208 - round((item["syncs"] / max_syncs) * 108)
+        points.append(f"{x},{y}")
+        labels.append(f'<span>{escape(item["hour"])}</span>')
+    return f"""
+    <section class="trend-card">
+      <div class="trend-head">
+        <div>
+          <span class="eyebrow">Sync volume trends</span>
+          <h3>Traffic and packaging pressure across the evidence lane.</h3>
+        </div>
+        <div class="legend-dot"><i></i> Sync volume</div>
+      </div>
+      <svg viewBox="0 0 860 250" class="line-chart" aria-label="Sync volume trend">
+        <defs>
+          <linearGradient id="syncFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(91, 92, 246, 0.22)" />
+            <stop offset="100%" stop-color="rgba(91, 92, 246, 0.01)" />
+          </linearGradient>
+        </defs>
+        <line x1="20" y1="72" x2="840" y2="72" class="chart-rule"></line>
+        <line x1="20" y1="128" x2="840" y2="128" class="chart-rule"></line>
+        <line x1="20" y1="184" x2="840" y2="184" class="chart-rule"></line>
+        <polyline fill="none" stroke="#5d5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="{' '.join(points)}"></polyline>
+        <polygon fill="url(#syncFill)" points="{' '.join(points)} 826,218 34,218"></polygon>
+      </svg>
+      <div class="chart-labels">{''.join(labels)}</div>
+    </section>
+    """
+
+
+def _distribution_card() -> str:
+    monitor = SERVICE.health_monitor()
+    rows = []
+    for item in monitor["distribution"]:
+        rows.append(
             f"""
-            <div class="chart-col">
-              <div class="chart-bar-wrap">
-                <div class="chart-bar" style="height:{height}px"></div>
-              </div>
-              <div class="chart-num">{item["bundles"]}</div>
-              <div class="chart-label">{escape(item["day"])}</div>
+            <div class="dist-row">
+              <div class="dist-top"><strong>{escape(item["name"])}</strong><span>{item["share"]}%</span></div>
+              <div class="progress-track dark"><div class="progress-fill violet" style="width:{item["share"]}%"></div></div>
             </div>
             """
         )
-    summary = _summary()
+    totals = monitor["totals"]
     return f"""
-      <div class="mini-chart">
-        <div class="chart-head">
-          <div>
-            <div class="micro-label">Bundle velocity</div>
-            <h3>How much evidence packaging work the lane is carrying this week.</h3>
-          </div>
-          <div class="chart-legend">
-            <span><i></i> Evidence bundles prepared</span>
-          </div>
-        </div>
-        <div class="chart-grid">{"".join(bars)}</div>
-        <div class="chart-foot">
-          <span><strong>Average evidence age:</strong> {summary["averageEvidenceAge"]} days</span>
-          <span><strong>Queue pressure:</strong> {summary["urgentCount"]} urgent / {summary["watchCount"]} watch</span>
+    <section class="distribution-card">
+      <span class="eyebrow">Node distribution</span>
+      {''.join(rows)}
+      <div class="dist-foot">
+        <span>Active processes</span>
+        <strong>{totals["activeProcesses"]} units</strong>
+      </div>
+    </section>
+    """
+
+
+def _pipeline_topology() -> str:
+    stages = [
+        ("Source", "Identity Capture", "Ingesting change requests and user metadata from ServiceNow.", "standby"),
+        ("Core", "Pipeline Engine", "Decrypting metadata and mapping incident logs into evidence-ready packages.", "active"),
+        ("Target", "Mapping Engine", "Aggregating session logs into audit-ready JSON-parsed packages.", "standby"),
+    ]
+    cards = []
+    for stage, title, desc, status in stages:
+        status_text = "Active" if status == "active" else "Standby"
+        cards.append(
+            f"""
+            <article class="topology-card {status}">
+              <span class="eyebrow">{escape(stage)}</span>
+              <h4>{escape(title)}</h4>
+              <p>{escape(desc)}</p>
+              <div class="topology-status">{escape(status_text)}</div>
+            </article>
+            """
+        )
+    return f"""
+    <section class="topology-grid">
+      {cards[0]}
+      <div class="topology-core">
+        <div class="core-orbit">
+          <div class="core-icon">⛓</div>
+          <h4>Pipeline Engine</h4>
+          <p>Decrypting metadata and mapping incident logs into audit-ready packages.</p>
+          <div class="core-dots"><i></i><i></i><i></i></div>
         </div>
       </div>
+      {cards[2]}
+    </section>
+    """
+
+
+def _bundle_table() -> str:
+    rows = []
+    for bundle in SERVICE.evidence_bundles()[:4]:
+        rows.append(
+            f"""
+            <tr>
+              <td><strong>{escape(bundle["incidentId"].replace("INC", "TX-"))}</strong></td>
+              <td>{escape(bundle["requiredEvidence"][0].replace(" artifact chain", "").replace(" ", "_").title())}</td>
+              <td>{escape(bundle["accountName"])}</td>
+              <td>{escape(bundle["incidentId"])}</td>
+              <td>{'VERIFIED' if bundle["bundleReady"] else 'SYNCING' if bundle["verdict"] == 'watch' else 'PENDING'}</td>
+            </tr>
+            """
+        )
+    return f"""
+    <section class="table-card">
+      <div class="filter-row">
+        <span class="filter-chip active">All</span>
+        <span class="filter-chip">Verified</span>
+        <span class="filter-chip">Syncing</span>
+        <span class="filter-chip">Pending</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Transaction ID</th>
+            <th>Evidence Type</th>
+            <th>CyberArk Vault</th>
+            <th>Snow Ref</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(rows)}
+        </tbody>
+      </table>
+    </section>
     """
 
 
 def _shell(title: str, subtitle: str, current: str, body: str) -> str:
     summary = _summary()
-    nav_items = [
-        ("/", "Overview", "overview"),
+    monitor = SERVICE.health_monitor()
+    tabs = [
+        ("/", "Dashboard", "overview"),
+        ("/security-architecture", "Security & Architecture", "architecture"),
+        ("/audit-log", "Audit Trail", "audit"),
+    ]
+    sidebar = [
+        ("/", "Dashboard", "overview"),
         ("/pipeline-board", "Pipeline Board", "pipeline"),
-        ("/bundles", "Bundles", "bundles"),
-        ("/audit-log", "Audit Log", "audit"),
-        ("/integrations", "Integrations", "integrations"),
+        ("/bundles", "Evidence Bundles", "bundles"),
+        ("/monitor", "System Monitor", "monitor"),
+        ("/security-architecture", "Security & Architecture", "architecture"),
+        ("/integrations", "Integration Posture", "integrations"),
         ("/methodology", "Methodology", "methodology"),
         ("/docs", "Docs", "docs"),
     ]
-    sidebar = "".join(
-        f"""<a class="side-link {'active' if key == current else ''}" href="{href}">{escape(label)}</a>"""
-        for href, label, key in nav_items
-    )
-    tabs = "".join(
-        f"""<a class="tab-pill {'active' if key == current else ''}" href="{href}">{escape(label)}</a>"""
-        for href, label, key in nav_items
-    )
     return f"""<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -82,667 +225,615 @@ def _shell(title: str, subtitle: str, current: str, body: str) -> str:
     <title>{escape(title)}</title>
     <style>
       :root {{
-        color-scheme: dark;
-        --bg: #04070d;
-        --panel: rgba(9, 16, 28, 0.92);
-        --line: rgba(255,255,255,0.07);
-        --text: #f5f7fd;
-        --muted: #96a9c6;
-        --soft: #6d809b;
-        --blue: #74c8ff;
-        --indigo: #5d78ff;
-        --green: #49d79e;
-        --amber: #f6c46a;
-        --red: #ff7987;
+        --page: #eef2f7;
+        --nav: #121a2f;
+        --nav-soft: #202a41;
+        --panel: #ffffff;
+        --ink: #1b2a41;
+        --muted: #6f86a4;
+        --line: #dfe6f0;
+        --violet: #5d5cf6;
+        --violet-soft: rgba(93, 92, 246, 0.12);
+        --green: #16c784;
+        --green-soft: rgba(22, 199, 132, 0.12);
+        --amber: #f5b94c;
+        --amber-soft: rgba(245, 185, 76, 0.16);
+        --red: #ff5c7a;
+        --red-soft: rgba(255, 92, 122, 0.14);
+        --shadow: 0 24px 54px rgba(22, 32, 55, 0.08);
       }}
       * {{ box-sizing: border-box; }}
       body {{
         margin: 0;
-        font-family: Inter, "Segoe UI", system-ui, sans-serif;
-        color: var(--text);
+        font-family: "Segoe UI", Inter, system-ui, sans-serif;
+        color: var(--ink);
         background:
-          radial-gradient(circle at top left, rgba(116,200,255,0.14), transparent 24%),
-          radial-gradient(circle at top right, rgba(255,121,135,0.08), transparent 16%),
-          linear-gradient(180deg, #02050a 0%, #050912 100%);
+          radial-gradient(circle at top left, rgba(93, 92, 246, 0.08), transparent 18%),
+          linear-gradient(180deg, #f7f9fc 0%, var(--page) 100%);
       }}
       a {{ color: inherit; text-decoration: none; }}
-      .shell {{ min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0,1fr); }}
-      .sidebar {{
-        background: rgba(0,0,0,0.3);
-        border-right: 1px solid rgba(255,255,255,0.06);
-        backdrop-filter: blur(16px);
-        padding: 24px 18px;
-        display: flex;
-        flex-direction: column;
-      }}
-      .brand {{
-        display: flex; align-items: center; gap: 12px; padding: 8px 10px 18px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-      }}
-      .brand-mark {{
-        width: 40px; height: 40px; border-radius: 12px; display:grid; place-items:center;
-        background: linear-gradient(135deg, #0c97c2, #5d78ff); color:white; font-weight:900;
-        box-shadow: 0 0 18px rgba(93,120,255,0.28);
-      }}
-      .brand strong {{ display:block; font-size:14px; }}
-      .brand span {{ display:block; margin-top:4px; color:var(--blue); font-size:10px; letter-spacing:.18em; text-transform:uppercase; }}
-      nav {{ margin-top: 18px; }}
-      .side-link {{
-        display:block; padding:13px 14px; border-radius:14px; color:#8195b4; font-size:12px;
-        font-weight:700; text-transform:uppercase; letter-spacing:.12em; transition:all 150ms ease;
-      }}
-      .side-link.active {{ color:var(--blue); background:rgba(116,200,255,0.08); border:1px solid rgba(116,200,255,0.16); }}
-      .side-link:hover {{ color:var(--text); background:rgba(255,255,255,0.04); }}
-      .meta {{ margin-top:auto; padding:16px 12px 8px; border-top:1px solid rgba(255,255,255,0.06); }}
-      .meta dt {{ color:#687c98; font-size:10px; text-transform:uppercase; letter-spacing:.14em; margin-bottom:4px; }}
-      .meta dd {{ margin:0 0 14px; font-size:12px; font-weight:700; line-height:1.45; }}
       .topbar {{
-        height:72px; position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between;
-        padding:0 34px; background:rgba(0,0,0,0.34); border-bottom:1px solid rgba(255,255,255,0.06); backdrop-filter: blur(16px);
+        position: sticky; top: 0; z-index: 5;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 18px; padding: 18px 30px; background: var(--nav); color: white;
+        box-shadow: 0 16px 40px rgba(6, 12, 24, 0.24);
       }}
-      .status-chip {{
-        display:inline-flex; align-items:center; gap:10px; padding:9px 14px; border-radius:999px;
-        border:1px solid rgba(116,200,255,0.14); background:rgba(116,200,255,0.05); color:#b9e1ff;
-        font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.18em;
+      .brand {{ display: flex; align-items: center; gap: 16px; }}
+      .brand-mark {{
+        width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center;
+        background: linear-gradient(135deg, #5d5cf6, #7b68ff); font-weight: 900; font-size: 26px;
       }}
-      .status-dot {{ width:8px; height:8px; border-radius:50%; background:var(--blue); box-shadow:0 0 12px rgba(116,200,255,0.84); }}
-      .topbar-right {{ display:flex; align-items:center; gap:22px; }}
-      .meta-block {{ display:flex; flex-direction:column; align-items:flex-end; }}
-      .meta-block span {{ color:#6d809b; font-size:9px; text-transform:uppercase; letter-spacing:.15em; }}
-      .meta-block strong {{ margin-top:4px; font-size:11px; text-transform:uppercase; letter-spacing:.12em; }}
-      .action-pill {{
-        display:inline-flex; align-items:center; padding:12px 16px; border-radius:999px; color:white;
-        background:linear-gradient(135deg, #0f8fbf, #5d78ff); box-shadow:0 0 20px rgba(93,120,255,0.24);
-        font-size:10px; font-weight:900; letter-spacing:.18em; text-transform:uppercase;
+      .brand-copy strong {{ display: block; font-size: 20px; letter-spacing: 0.02em; }}
+      .brand-copy span {{ display: block; margin-top: 2px; color: #b9c5dc; font-size: 12px; }}
+      .top-tabs {{
+        display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 16px;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.05);
       }}
-      .wrap {{ max-width: 1280px; margin:0 auto; padding:34px; }}
+      .nav-link {{
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 12px 18px; border-radius: 12px; color: #b6c4db; font-size: 11px;
+        font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em;
+      }}
+      .nav-link.active {{ background: var(--violet); color: white; box-shadow: 0 12px 28px rgba(93, 92, 246, 0.32); }}
+      .top-actions {{ display: flex; align-items: center; gap: 12px; }}
+      .action {{
+        padding: 11px 16px; border-radius: 14px; background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08); color: #cad5ea; font-weight: 700;
+      }}
+      .status-live {{ display: inline-flex; align-items: center; gap: 10px; color: #14d18a; font-size: 11px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }}
+      .status-live i {{ width: 10px; height: 10px; border-radius: 50%; background: #14d18a; box-shadow: 0 0 16px rgba(20, 209, 138, 0.7); }}
+      .page {{ max-width: 1720px; margin: 26px auto 24px; padding: 0 22px 24px; }}
       .hero {{
-        border:1px solid var(--line); border-radius:28px; padding:28px;
-        background: linear-gradient(180deg, rgba(9,16,28,0.96), rgba(6,11,20,0.94));
-        box-shadow: 0 26px 60px rgba(0,0,0,0.34);
+        display: grid; gap: 20px; grid-template-columns: 1.55fr 1fr;
+        padding: 24px; background: white; border: 1px solid var(--line); border-radius: 28px; box-shadow: var(--shadow);
       }}
-      .hero-eyebrow {{ margin-bottom:18px; color:var(--blue); font-size:11px; letter-spacing:.28em; text-transform:uppercase; font-weight:800; }}
-      h1 {{ margin:0; font-size:clamp(38px,5vw,70px); line-height:.92; font-family:Georgia, "Times New Roman", serif; letter-spacing:-.04em; }}
-      .hero-subtitle {{ margin-top:14px; max-width:860px; color:var(--muted); font-size:19px; line-height:1.55; }}
-      .hero-strip {{ display:flex; flex-wrap:wrap; gap:14px; margin-top:24px; }}
-      .hero-kpi {{ min-width:180px; padding:14px 16px; border-radius:18px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.03); }}
-      .hero-kpi .k {{ color:#6f83a0; font-size:10px; text-transform:uppercase; letter-spacing:.14em; font-weight:800; }}
-      .hero-kpi .v {{ margin-top:6px; font-size:28px; font-weight:800; }}
-      .hero-callout {{
-        margin-top:18px; padding:18px 20px; border-radius:18px; border:1px solid rgba(255,255,255,0.06); background:rgba(2,8,17,0.62);
+      .eyebrow {{ color: #7c8ea9; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; }}
+      h1 {{ margin: 14px 0 10px; font-size: clamp(40px, 4vw, 64px); line-height: 0.95; letter-spacing: -0.05em; font-family: Georgia, "Times New Roman", serif; }}
+      .hero p {{ margin: 0; color: var(--muted); font-size: 18px; line-height: 1.6; max-width: 860px; }}
+      .lead-box {{
+        border-radius: 20px; padding: 18px 20px; margin-top: 18px; background: linear-gradient(180deg, #f7f8ff, #f2f4ff);
+        border: 1px solid #dce2ff;
       }}
-      .hero-callout strong {{ display:block; color:var(--amber); font-size:10px; text-transform:uppercase; letter-spacing:.18em; margin-bottom:8px; }}
-      .hero-callout p {{ margin:0; color:#dce7fb; font-size:17px; line-height:1.5; }}
-      .tab-row {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }}
-      .tab-pill {{
-        display:inline-flex; align-items:center; padding:10px 14px; border-radius:999px; border:1px solid rgba(255,255,255,0.08);
-        background:rgba(255,255,255,0.03); color:#afc0d8; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.12em;
+      .lead-box strong {{ display: block; color: #5d5cf6; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 8px; }}
+      .lead-box span {{ font-size: 16px; line-height: 1.55; color: #243754; }}
+      .hero-side {{
+        border-radius: 24px; padding: 22px; background: linear-gradient(180deg, #131d34, #10182a);
+        color: white; display: grid; gap: 18px;
       }}
-      .tab-pill.active {{ color:var(--amber); border-color:rgba(246,196,106,0.18); background:rgba(246,196,106,0.08); }}
-      .page-section {{ margin-top:24px; border-radius:26px; border:1px solid var(--line); background:var(--panel); overflow:hidden; box-shadow:0 24px 54px rgba(0,0,0,0.24); }}
-      .section-head {{ padding:20px 24px 14px; border-bottom:1px solid rgba(255,255,255,0.05); }}
-      .section-head strong {{ display:block; color:var(--blue); font-size:10px; text-transform:uppercase; letter-spacing:.2em; margin-bottom:10px; }}
-      .section-head h2 {{ margin:0; font-family:Georgia, "Times New Roman", serif; font-size:24px; letter-spacing:-.03em; }}
-      .section-head p {{ margin:10px 0 0; color:var(--muted); font-size:15px; line-height:1.55; }}
-      .section-body {{ padding:24px; }}
-      .stats-grid {{ display:grid; gap:18px; grid-template-columns:repeat(4,minmax(0,1fr)); }}
-      .stat-card {{ border-radius:20px; padding:18px 18px 20px; border:1px solid rgba(255,255,255,0.06); background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.08)); }}
-      .stat-card .label {{ color:#71839d; font-size:10px; text-transform:uppercase; letter-spacing:.16em; font-weight:800; }}
-      .stat-card .value {{ margin-top:10px; font-size:36px; font-weight:900; }}
-      .stat-card .sub {{ margin-top:10px; color:var(--muted); font-size:14px; line-height:1.45; }}
-      .insight-grid {{ display:grid; gap:18px; grid-template-columns:1.35fr 1fr; }}
-      .three-col {{ display:grid; gap:18px; grid-template-columns:repeat(3,minmax(0,1fr)); }}
-      .two-col {{ display:grid; gap:18px; grid-template-columns:1fr 1fr; }}
-      .panel {{ border-radius:22px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,9,18,0.55); padding:22px; }}
-      .panel h3 {{ margin:0 0 16px; font-size:18px; }}
-      .panel-grid {{ display:grid; gap:14px; }}
-      .metric-card {{ padding:16px; border:1px solid rgba(255,255,255,0.05); border-radius:18px; background:rgba(255,255,255,0.028); }}
-      .metric-card .micro, .micro-label {{ color:#6f83a0; font-size:9px; text-transform:uppercase; letter-spacing:.16em; font-weight:800; }}
-      .metric-card .title {{ margin-top:8px; font-size:15px; font-weight:800; }}
-      .metric-card .desc {{ margin-top:8px; color:var(--muted); font-size:13px; line-height:1.5; }}
-      .incident-grid {{ display:grid; gap:16px; }}
-      .incident-card {{ border-radius:22px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,9,18,0.6); overflow:hidden; }}
-      .incident-top {{ display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:18px; align-items:center; padding:20px 22px; }}
-      .incident-card h3 {{ margin:0; font-size:22px; font-weight:800; letter-spacing:-.03em; }}
-      .incident-card .meta-text {{ margin-top:8px; color:var(--muted); font-size:13px; }}
-      .tag {{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }}
-      .healthy {{ color:var(--green); background:rgba(73,215,158,0.12); border:1px solid rgba(73,215,158,0.14); }}
-      .watch {{ color:var(--amber); background:rgba(246,196,106,0.12); border:1px solid rgba(246,196,106,0.14); }}
-      .critical {{ color:var(--red); background:rgba(255,121,135,0.12); border:1px solid rgba(255,121,135,0.14); }}
-      .score-stack {{ text-align:right; }}
-      .score-stack .micro {{ color:#6f83a0; font-size:9px; text-transform:uppercase; letter-spacing:.16em; font-weight:800; }}
-      .score-stack .value {{ margin-top:6px; font-size:28px; font-weight:900; }}
-      .incident-bottom {{ padding:18px 22px 22px; border-top:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); }}
-      .signal-pill {{
-        display:inline-flex; align-items:center; padding:8px 10px; border-radius:999px; background:rgba(116,200,255,0.09); color:var(--blue); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+      .hero-side h3 {{ margin: 0; font-size: 18px; letter-spacing: 0.01em; }}
+      .hero-side p {{ margin: 0; color: #bdc9df; font-size: 14px; line-height: 1.6; }}
+      .hero-side .meta-row {{ display: flex; justify-content: space-between; gap: 18px; color: #8fa1bf; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }}
+      .hero-side .meta-row strong {{ color: white; font-size: 12px; }}
+      .grid-4 {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-top: 20px; }}
+      .grid-2plus {{ display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.58fr); gap: 18px; margin-top: 18px; }}
+      .grid-3 {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }}
+      .kpi-card, .trend-card, .distribution-card, .panel, .table-card {{
+        background: white; border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow);
       }}
-      .pill-stack {{ display:flex; flex-wrap:wrap; gap:10px; }}
-      .meter-row + .meter-row {{ margin-top:14px; }}
-      .meter-head {{ display:flex; justify-content:space-between; gap:16px; margin-bottom:8px; color:#cfe0f7; font-size:12px; font-weight:700; }}
-      .meter-track {{ height:10px; border-radius:999px; background:rgba(255,255,255,0.05); overflow:hidden; }}
-      .meter-fill {{ height:100%; border-radius:999px; }}
-      .meter-fill.good {{ background:linear-gradient(90deg, #1e7fc7, #49d79e); }}
-      .meter-fill.watch {{ background:linear-gradient(90deg, #2f82ff, #f6c46a); }}
-      .meter-fill.hot {{ background:linear-gradient(90deg, #d14d6c, #ff7987); }}
-      .mini-chart {{ border-radius:22px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,9,18,0.55); padding:22px; }}
-      .chart-head {{ display:flex; justify-content:space-between; gap:18px; align-items:flex-end; margin-bottom:16px; }}
-      .chart-head h3 {{ margin:10px 0 0; font-size:17px; max-width:420px; line-height:1.35; }}
-      .chart-legend span {{ display:inline-flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; }}
-      .chart-legend i {{ display:inline-block; width:12px; height:12px; border-radius:4px; background:linear-gradient(180deg, var(--blue), var(--indigo)); }}
-      .chart-grid {{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; min-height:170px; margin-top:24px; }}
-      .chart-col {{ flex:1; text-align:center; }}
-      .chart-bar-wrap {{ display:flex; align-items:flex-end; justify-content:center; height:124px; }}
-      .chart-bar {{ width:70px; max-width:100%; border-radius:16px 16px 8px 8px; background:linear-gradient(180deg, var(--blue), var(--indigo)); box-shadow:0 0 24px rgba(93,120,255,0.2); }}
-      .chart-num {{ margin-top:12px; color:#f6f8fe; font-size:14px; font-weight:800; }}
-      .chart-label {{ margin-top:6px; color:#96a9c6; font-size:10px; letter-spacing:.16em; text-transform:uppercase; }}
-      .chart-foot {{ display:flex; justify-content:space-between; gap:12px; margin-top:18px; color:var(--muted); font-size:12px; }}
-      .table-shell {{ overflow:hidden; border-radius:22px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,9,18,0.58); }}
-      table {{ width:100%; border-collapse:collapse; }}
-      th, td {{ padding:16px 18px; text-align:left; vertical-align:top; }}
-      thead th {{ color:#7385a0; font-size:10px; text-transform:uppercase; letter-spacing:.18em; font-weight:900; background:rgba(255,255,255,0.035); }}
-      tbody tr + tr td {{ border-top:1px solid rgba(255,255,255,0.05); }}
-      tbody tr:hover td {{ background:rgba(116,200,255,0.03); }}
-      .subtext {{ margin-top:6px; color:var(--muted); font-size:12px; line-height:1.45; }}
-      .log-shell {{ border-radius:22px; border:1px solid rgba(255,255,255,0.08); background:rgba(2,6,12,0.88); overflow:hidden; }}
-      .log-head {{ padding:16px 18px; display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); }}
-      .log-lights {{ display:flex; gap:8px; }}
-      .log-lights i {{ width:11px; height:11px; border-radius:50%; display:block; }}
-      .log-lights i:nth-child(1) {{ background:rgba(255,121,135,0.55); }}
-      .log-lights i:nth-child(2) {{ background:rgba(246,196,106,0.55); }}
-      .log-lights i:nth-child(3) {{ background:rgba(73,215,158,0.55); }}
-      .log-head strong {{ color:var(--blue); font-size:10px; letter-spacing:.18em; text-transform:uppercase; }}
-      .log-body {{ padding:18px 18px 8px; }}
-      .log-line {{ display:grid; grid-template-columns:170px 180px minmax(0,1fr) 90px; gap:14px; align-items:start; padding:10px 12px; border-radius:14px; }}
-      .log-line + .log-line {{ margin-top:8px; }}
-      .log-line:hover {{ background:rgba(255,255,255,0.03); }}
-      .log-time {{ color:#6f83a0; font-size:11px; font-family:"Cascadia Code", Consolas, monospace; }}
-      .log-action {{ color:var(--blue); font-size:11px; font-family:"Cascadia Code", Consolas, monospace; font-weight:800; letter-spacing:.08em; }}
-      .log-resource strong {{ display:block; font-size:12px; }}
-      .log-resource span {{ display:block; margin-top:4px; color:var(--muted); font-size:12px; line-height:1.45; }}
-      .result-good {{ color:var(--green); }}
-      .result-bad {{ color:var(--red); }}
-      .config-grid {{ display:grid; gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); }}
-      .config-row {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border-radius:16px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); }}
-      .config-row strong {{ display:block; font-size:13px; }}
-      .config-row span {{ display:block; margin-top:6px; color:var(--muted); font-size:12px; }}
-      .toggle {{ min-width:78px; text-align:center; padding:8px 12px; border-radius:999px; font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }}
-      .toggle.good {{ background:rgba(73,215,158,0.12); color:var(--green); border:1px solid rgba(73,215,158,0.18); }}
-      .toggle.bad {{ background:rgba(255,121,135,0.12); color:var(--red); border:1px solid rgba(255,121,135,0.18); }}
-      .integration-row {{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 16px; border-radius:16px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); }}
-      .integration-row strong {{ display:block; font-size:13px; }}
-      .integration-row span {{ display:block; margin-top:6px; color:var(--muted); font-size:12px; }}
-      .code-panel {{ border-radius:22px; border:1px solid rgba(255,255,255,0.08); background:rgba(2,6,12,0.92); padding:18px 20px 20px; }}
-      .code-head {{ display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.08); }}
-      .code-head span {{ color:var(--blue); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.18em; }}
-      .lights {{ display:flex; gap:7px; }}
-      .lights i {{ display:block; width:9px; height:9px; border-radius:50%; }}
-      .lights i:nth-child(1) {{ background:rgba(255,121,135,0.7); }}
-      .lights i:nth-child(2) {{ background:rgba(246,196,106,0.7); }}
-      .lights i:nth-child(3) {{ background:rgba(73,215,158,0.7); }}
-      pre {{ margin:0; white-space:pre-wrap; overflow:auto; color:#dce8fb; font-size:13px; line-height:1.6; font-family:"Cascadia Code", Consolas, monospace; }}
-      @media (max-width: 1100px) {{
-        .shell {{ grid-template-columns:1fr; }}
-        .sidebar {{ display:none; }}
-        .topbar {{ height:auto; padding:18px 20px; flex-direction:column; align-items:flex-start; gap:14px; }}
-        .stats-grid, .insight-grid, .three-col, .two-col, .config-grid {{ grid-template-columns:1fr; }}
-        .chart-foot {{ flex-direction:column; }}
-        .incident-top {{ grid-template-columns:1fr; }}
-        .log-line {{ grid-template-columns:1fr; }}
+      .kpi-card {{ padding: 22px 24px; }}
+      .kpi-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: center; }}
+      .arrow {{ color: #b3c0d4; font-size: 18px; }}
+      .kpi-value {{ margin-top: 10px; font-size: 44px; font-style: italic; font-weight: 800; letter-spacing: -0.04em; }}
+      .progress-track {{ margin-top: 16px; height: 7px; border-radius: 999px; background: #edf1f6; overflow: hidden; }}
+      .progress-track.slim {{ height: 6px; margin-top: 10px; }}
+      .progress-track.dark {{ background: rgba(255,255,255,0.08); }}
+      .progress-fill {{ height: 100%; border-radius: 999px; }}
+      .progress-fill.violet {{ background: linear-gradient(90deg, #5d5cf6, #746dff); }}
+      .progress-fill.good {{ background: linear-gradient(90deg, #19bf7f, #2bd49b); }}
+      .progress-fill.hot {{ background: linear-gradient(90deg, #ff5c7a, #ff8a64); }}
+      .kpi-note {{ margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }}
+      .component-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }}
+      .component-card {{
+        position: relative; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 16px;
+        padding: 22px; background: white; border-radius: 24px; border: 1px solid var(--line); box-shadow: var(--shadow);
+      }}
+      .component-icon {{
+        width: 74px; height: 64px; border-radius: 18px; display: grid; place-items: center;
+        background: linear-gradient(180deg, #ebf4ef, #f4fbf7); color: #27c58b; font-size: 28px; font-weight: 900;
+      }}
+      .component-card .live-dot {{
+        position: absolute; top: 18px; right: 18px; width: 10px; height: 10px; border-radius: 50%;
+        background: #3ce0a3;
+      }}
+      .component-top {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
+      .component-top strong {{ font-size: 16px; }}
+      .component-cpu {{ font-size: 12px; font-weight: 800; }}
+      .component-cpu.good {{ color: #1abc7d; }}
+      .component-cpu.hot {{ color: #ff5776; }}
+      .component-metrics {{ display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--muted); font-size: 12px; font-weight: 700; }}
+      .trend-card {{ padding: 22px 24px; }}
+      .trend-head {{ display: flex; justify-content: space-between; gap: 18px; align-items: start; }}
+      .trend-head h3 {{ margin: 8px 0 0; font-size: 20px; letter-spacing: -0.02em; }}
+      .legend-dot {{ display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 700; }}
+      .legend-dot i {{ width: 12px; height: 12px; border-radius: 50%; background: #5d5cf6; display: inline-block; }}
+      .line-chart {{ width: 100%; height: auto; margin-top: 10px; }}
+      .chart-rule {{ stroke: #dfe5ee; stroke-dasharray: 5 8; }}
+      .chart-labels {{ display: flex; justify-content: space-between; margin-top: -6px; color: #93a5bf; font-size: 12px; padding: 0 12px; }}
+      .distribution-card {{
+        padding: 24px; background: linear-gradient(180deg, #141d34, #10182b); color: white;
+      }}
+      .dist-row + .dist-row {{ margin-top: 22px; }}
+      .dist-top {{ display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }}
+      .dist-top strong {{ font-size: 16px; }}
+      .dist-top span {{ color: #8da2c7; font-weight: 800; }}
+      .dist-foot {{ display: flex; justify-content: space-between; gap: 12px; margin-top: 34px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08); color: #90a2bf; text-transform: uppercase; font-size: 12px; letter-spacing: 0.12em; }}
+      .dist-foot strong {{ color: #18d28c; font-size: 22px; }}
+      .topology-grid {{ display: grid; grid-template-columns: minmax(0, 1fr) 1.2fr minmax(0, 1fr); gap: 18px; margin-top: 18px; align-items: center; }}
+      .topology-card {{
+        min-height: 240px; padding: 24px; border-radius: 24px; background: white; border: 1px solid var(--line); box-shadow: var(--shadow);
+      }}
+      .topology-card.target {{ background: linear-gradient(180deg, #172038, #12192c); color: white; }}
+      .topology-card h4, .core-orbit h4 {{ margin: 16px 0 10px; font-size: 24px; letter-spacing: -0.03em; }}
+      .topology-card p, .core-orbit p {{ margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }}
+      .topology-card.target p {{ color: #b6c3d8; }}
+      .topology-status {{ margin-top: 24px; color: #98aaca; font-size: 11px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; }}
+      .topology-core {{
+        position: relative; min-height: 280px; display: grid; place-items: center; border-radius: 28px;
+        background: linear-gradient(180deg, #f8faff, #f2f5ff); border: 1px solid #dfe6ff; box-shadow: var(--shadow);
+      }}
+      .topology-core::before, .topology-core::after {{
+        content: ""; position: absolute; top: 50%; width: 23%; height: 2px; background: linear-gradient(90deg, rgba(93,92,246,0.05), rgba(93,92,246,0.35), rgba(93,92,246,0.05));
+      }}
+      .topology-core::before {{ left: 0; }}
+      .topology-core::after {{ right: 0; }}
+      .core-orbit {{
+        width: 360px; height: 360px; border-radius: 50%; background: white; display: grid; place-items: center;
+        text-align: center; box-shadow: inset 0 0 0 16px rgba(93, 92, 246, 0.06);
+      }}
+      .core-icon {{
+        width: 90px; height: 90px; border-radius: 26px; display: grid; place-items: center;
+        background: linear-gradient(135deg, #5d5cf6, #7e6eff); color: white; font-size: 42px; font-weight: 900;
+        box-shadow: 0 24px 44px rgba(93, 92, 246, 0.28);
+      }}
+      .core-dots {{ display: flex; gap: 10px; justify-content: center; margin-top: 14px; }}
+      .core-dots i {{ width: 8px; height: 8px; border-radius: 50%; background: rgba(93, 92, 246, 0.35); }}
+      .core-dots i:nth-child(2) {{ background: rgba(93, 92, 246, 0.85); }}
+      .table-card {{ padding: 18px 20px 10px; margin-top: 18px; overflow: hidden; }}
+      .filter-row {{ display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }}
+      .filter-chip {{
+        display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px;
+        border: 1px solid var(--line); color: #93a2b8; background: #f9fbff; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+      }}
+      .filter-chip.active {{ color: white; border-color: #5d5cf6; background: #5d5cf6; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 16px 14px; text-align: left; vertical-align: top; }}
+      thead th {{ color: #8ea1bc; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.12em; }}
+      tbody tr + tr td {{ border-top: 1px solid #edf1f6; }}
+      tbody td {{ font-size: 14px; color: #20324d; }}
+      .panel {{ padding: 24px; }}
+      .panel h2 {{ margin: 12px 0 8px; font-size: 28px; letter-spacing: -0.03em; font-family: Georgia, "Times New Roman", serif; }}
+      .panel p {{ margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }}
+      .mini-panel {{ border-radius: 20px; background: #f8faff; border: 1px solid #ebf0f7; padding: 18px; }}
+      .mini-panel h3 {{ margin: 0 0 8px; font-size: 15px; }}
+      .mini-panel p {{ font-size: 14px; }}
+      .badge {{
+        display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 999px;
+        font-size: 11px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+      }}
+      .badge.healthy {{ color: #10a86e; background: var(--green-soft); }}
+      .badge.watch {{ color: #d89318; background: var(--amber-soft); }}
+      .badge.critical {{ color: #e54565; background: var(--red-soft); }}
+      .incident-card {{
+        padding: 22px 24px; border-radius: 24px; background: white; border: 1px solid var(--line); box-shadow: var(--shadow);
+      }}
+      .incident-head {{ display: flex; justify-content: space-between; gap: 16px; align-items: start; }}
+      .incident-head h3 {{ margin: 0; font-size: 28px; letter-spacing: -0.04em; }}
+      .incident-copy p {{ margin: 10px 0 0; color: var(--muted); font-size: 15px; line-height: 1.6; }}
+      .incident-meta {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }}
+      .meta-chip {{ padding: 14px 16px; border-radius: 16px; background: #f7faff; border: 1px solid #ebf0f7; }}
+      .meta-chip span {{ display: block; color: #8a9cb6; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 800; }}
+      .meta-chip strong {{ display: block; margin-top: 8px; font-size: 16px; }}
+      .log-shell {{ overflow: hidden; border-radius: 24px; background: #121a2f; color: white; box-shadow: var(--shadow); }}
+      .log-head {{ display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+      .lights {{ display: flex; gap: 8px; }}
+      .lights i {{ width: 11px; height: 11px; border-radius: 50%; display: block; }}
+      .lights i:nth-child(1) {{ background: rgba(255, 92, 122, 0.75); }}
+      .lights i:nth-child(2) {{ background: rgba(245, 185, 76, 0.75); }}
+      .lights i:nth-child(3) {{ background: rgba(20, 209, 138, 0.75); }}
+      .log-title {{ color: #c4d0e8; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.16em; }}
+      .log-body {{ padding: 16px; display: grid; gap: 10px; }}
+      .log-line {{
+        display: grid; grid-template-columns: 170px 220px minmax(0, 1fr) 90px;
+        gap: 14px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,0.03);
+      }}
+      .log-line time {{ color: #89a0c2; font-family: Consolas, monospace; font-size: 12px; }}
+      .log-line strong {{ color: #6fc6ff; font-family: Consolas, monospace; font-size: 12px; letter-spacing: 0.06em; }}
+      .log-line p {{ margin: 0; color: #d9e3f5; font-size: 13px; line-height: 1.5; }}
+      .terminal-card {{ background: linear-gradient(180deg, #121a2f, #101728); color: white; border: 1px solid rgba(255,255,255,0.05); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }}
+      .terminal-card pre {{ margin: 0; padding: 18px; font-size: 13px; line-height: 1.7; font-family: Consolas, "Cascadia Code", monospace; white-space: pre-wrap; }}
+      .footer {{
+        display: flex; justify-content: space-between; gap: 14px; margin-top: 22px; padding: 14px 4px 0;
+        color: #7f91aa; font-size: 12px; align-items: center;
+      }}
+      .footer .right {{ display: flex; align-items: center; gap: 10px; }}
+      .footer .right i {{ width: 8px; height: 8px; border-radius: 50%; background: #16c784; }}
+      @media (max-width: 1280px) {{
+        .hero, .grid-2plus, .topology-grid {{ grid-template-columns: 1fr; }}
+        .grid-4, .component-grid, .grid-3, .incident-meta {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+        .topbar {{ flex-wrap: wrap; }}
+      }}
+      @media (max-width: 880px) {{
+        .grid-4, .component-grid, .grid-3, .incident-meta {{ grid-template-columns: 1fr; }}
+        .top-tabs {{ width: 100%; overflow: auto; }}
+        .log-line {{ grid-template-columns: 1fr; }}
       }}
     </style>
   </head>
   <body>
-    <div class="shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">SE</div>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">P</div>
+        <div class="brand-copy">
+          <strong>Evidence Pipeline</strong>
+          <span>ServiceNow → CyberArk Bridge</span>
+        </div>
+      </div>
+      <nav class="top-tabs">
+        {''.join(_nav_link(href, label, current, key) for href, label, key in tabs)}
+      </nav>
+      <div class="top-actions">
+        <a class="action" href="/monitor">Monitor</a>
+        <a class="action" href="/audit-log">Terminal</a>
+        <span class="status-live"><i></i> System active</span>
+      </div>
+    </header>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <span class="eyebrow">ServiceNow CyberArk Evidence Pipeline</span>
+          <h1>{escape(title)}</h1>
+          <p>{escape(subtitle)}</p>
+          <div class="lead-box">
+            <strong>Lead recommendation</strong>
+            <span>{escape(summary["leadRecommendation"])}</span>
+          </div>
+        </div>
+        <aside class="hero-side">
           <div>
-            <strong>ServiceNow CyberArk Evidence Pipeline</strong>
-            <span>instance: evidence-bus</span>
+            <span class="eyebrow" style="color:#9db0d1;">System active</span>
+            <h3>Evidence bridge posture</h3>
+            <p>The pipeline keeps incident state, vault context, evidence aging, and closure artifacts visible in the same operating lane.</p>
           </div>
-        </div>
-        <nav>{sidebar}</nav>
-        <dl class="meta">
-          <dt>Urgent incidents</dt>
-          <dd>{summary["urgentCount"]} incidents</dd>
-          <dt>Bundle-ready</dt>
-          <dd>{summary["bundleReadyCount"]} records</dd>
-          <dt>Lead incident</dt>
-          <dd>{escape(summary["highestRiskIncident"])}</dd>
-        </dl>
-      </aside>
-      <main>
-        <header class="topbar">
-          <div class="status-chip"><span class="status-dot"></span>Evidence pipeline live</div>
-          <div class="topbar-right">
-            <div class="meta-block"><span>Average evidence age</span><strong>{summary["averageEvidenceAge"]} days</strong></div>
-            <div class="meta-block"><span>Exceptions</span><strong>{summary["exceptionCount"]} active</strong></div>
-            <a class="action-pill" href="/docs">Open API docs</a>
-          </div>
-        </header>
-        <div class="wrap">
-          <section class="hero">
-            <div class="hero-eyebrow">ServiceNow CyberArk Evidence Pipeline</div>
-            <h1>{escape(title)}</h1>
-            <p class="hero-subtitle">{escape(subtitle)}</p>
-            <div class="hero-strip">
-              <div class="hero-kpi"><div class="k">Incidents</div><div class="v">{summary["incidentCount"]}</div></div>
-              <div class="hero-kpi"><div class="k">Urgent lanes</div><div class="v">{summary["urgentCount"]}</div></div>
-              <div class="hero-kpi"><div class="k">Bundle-ready</div><div class="v">{summary["bundleReadyCount"]}</div></div>
-              <div class="hero-kpi"><div class="k">Assignment groups</div><div class="v">{summary["assignmentGroupCount"]}</div></div>
-            </div>
-            <div class="hero-callout">
-              <strong>Lead recommendation</strong>
-              <p>{escape(summary["leadRecommendation"])}</p>
-            </div>
-            <div class="tab-row">{tabs}</div>
-          </section>
-          {body}
-        </div>
-      </main>
-    </div>
+          <div class="meta-row"><span>Total syncs (24h)</span><strong>{summary["totalSyncs24h"]:,}</strong></div>
+          <div class="meta-row"><span>Pipeline success</span><strong>{summary["pipelineSuccess"]}%</strong></div>
+          <div class="meta-row"><span>CyberArk latency</span><strong>{summary["cyberarkLatencyMs"]}ms</strong></div>
+          <div class="meta-row"><span>API response</span><strong>{monitor["totals"]["apiResponseMs"]}ms</strong></div>
+        </aside>
+      </section>
+      {body}
+      <footer class="footer">
+        <span>v2.4.1-stable · Connected to: ServiceNow-Instance-01</span>
+        <div class="right"><i></i><span>Worker Node #12 Health: Excellent</span></div>
+      </footer>
+    </main>
   </body>
 </html>"""
 
 
-def _incident_card(incident: dict) -> str:
-    flags = []
-    if incident["staleEvidence"]:
-        flags.append('<span class="signal-pill">Stale evidence</span>')
-    if incident["ownerGap"]:
-        flags.append('<span class="signal-pill">Owner gap</span>')
-    if not incident["bundleReady"]:
-        flags.append('<span class="signal-pill">Bundle incomplete</span>')
-    if incident["exceptionCount"] > 0:
-        flags.append(f'<span class="signal-pill">{incident["exceptionCount"]} exceptions</span>')
-    return f"""
-      <div class="incident-card">
-        <div class="incident-top">
-          <div>
-            <h3>{escape(incident["incidentId"])}</h3>
-            <div class="meta-text">{escape(incident["accountName"])} · {escape(incident["assignmentGroup"])} · {escape(incident["servicenowState"])}</div>
-          </div>
-          <span class="tag {_verdict_class(incident["verdict"])}">{escape(incident["verdict"])}</span>
-          <div class="score-stack">
-            <div class="micro">Risk score</div>
-            <div class="value">{incident["riskScore"]}</div>
-          </div>
-        </div>
-        <div class="incident-bottom">
-          <div class="two-col">
-            <div>
-              <div class="meter-row">
-                <div class="meter-head"><span>Evidence age</span><span>{incident["evidenceAgeDays"]}d</span></div>
-                <div class="meter-track"><div class="meter-fill {'hot' if incident['evidenceAgeDays'] == 0 or incident['evidenceAgeDays'] > 90 else 'watch' if incident['evidenceAgeDays'] > 45 else 'good'}" style="width:{min(100, max(10, incident['evidenceAgeDays']))}%"></div></div>
-              </div>
-              <div class="meter-row">
-                <div class="meter-head"><span>Approval artifacts</span><span>{incident["approvalArtifacts"]}</span></div>
-                <div class="meter-track"><div class="meter-fill {'good' if incident['approvalArtifacts'] >= 3 else 'watch' if incident['approvalArtifacts'] >= 1 else 'hot'}" style="width:{min(100, incident['approvalArtifacts'] * 25)}%"></div></div>
-              </div>
-              <div class="meter-row">
-                <div class="meter-head"><span>Last activity</span><span>{incident["lastActivityHours"]}h</span></div>
-                <div class="meter-track"><div class="meter-fill {'good' if incident['lastActivityHours'] < 24 else 'watch' if incident['lastActivityHours'] < 48 else 'hot'}" style="width:{min(100, incident['lastActivityHours'])}%"></div></div>
-              </div>
-            </div>
-            <div class="panel-grid">
-              <div class="metric-card">
-                <div class="micro">Top concern</div>
-                <div class="title">{escape(incident["topConcern"])}</div>
-                <div class="desc">{escape(incident["nextAction"])}</div>
-              </div>
-              <div class="pill-stack">{"".join(flags) or '<span class="signal-pill">Ready</span>'}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    """
-
-
 def render_overview() -> str:
     summary = _summary()
-    catalog = SERVICE.incident_catalog()
+    monitor = SERVICE.health_monitor()
     body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Pipeline summary</strong>
-          <h2>Incident evidence only helps if it closes the gap between ServiceNow workflow and CyberArk truth.</h2>
-          <p>This pipeline treats incident closure, privileged review, and audit evidence as one lane. The point is to turn ticket state plus vault metadata into review-safe bundles before they harden into bad closure decisions.</p>
-        </div>
-        <div class="section-body">
-          <div class="stats-grid">
-            <div class="stat-card"><div class="label">Urgent incidents</div><div class="value">{summary["urgentCount"]}</div><div class="sub">Packets that should be forced through evidence refresh before closure.</div></div>
-            <div class="stat-card"><div class="label">Watch lanes</div><div class="value">{summary["watchCount"]}</div><div class="sub">Incidents carrying enough evidence weakness to deserve review pressure soon.</div></div>
-            <div class="stat-card"><div class="label">Stale evidence</div><div class="value">{summary["staleEvidenceCount"]}</div><div class="sub">Incidents whose evidence posture is too old or too thin to trust quietly.</div></div>
-            <div class="stat-card"><div class="label">Exceptions</div><div class="value">{summary["exceptionCount"]}</div><div class="sub">Open exception pressure still sitting inside the packaging lane.</div></div>
-          </div>
-          <div class="insight-grid" style="margin-top:20px;">
-            {_mini_chart()}
-            <div class="panel">
-              <h3>Why this pipeline exists</h3>
-              <div class="panel-grid">
-                <div class="metric-card">
-                  <div class="micro">ServiceNow side</div>
-                  <div class="title">Ticket state is not enough by itself.</div>
-                  <div class="desc">An incident can look active and still be missing the approval chain that makes it defensible later.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">CyberArk side</div>
-                  <div class="title">Vault metadata should become evidence, not just context.</div>
-                  <div class="desc">Safe ownership, dual approval, and target-system details all need to survive into the review packet.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">Pipeline objective</div>
-                  <div class="title">Turn incident handling into audit-ready records.</div>
-                  <div class="desc">This repo is strongest when a reviewer can tell what happened, why it is risky, and what packet should move next.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Pipeline board</strong>
-          <h2>The incidents most likely to need evidence intervention first.</h2>
-          <p>Every incident card combines ServiceNow state, CyberArk posture, evidence age, and owner quality so the riskiest packets stay visible.</p>
-        </div>
-        <div class="section-body">
-          <div class="incident-grid">{"".join(_incident_card(item) for item in catalog[:3])}</div>
-        </div>
-      </section>
+    <section class="grid-4">
+      {_kpi_card("Total syncs (24h)", f"{summary['totalSyncs24h']:,}", "Evidence packets flowing across the bridge in the last day.", 72)}
+      {_kpi_card("CyberArk latency", f"{summary['cyberarkLatencyMs']}ms", "Current enrichment latency at the vault edge.", 24)}
+      {_kpi_card("Pipeline success", f"{summary['pipelineSuccess']}%", "Successful package assembly and export completion.", 99, "good")}
+      {_kpi_card("Critical alerts", str(summary['criticalAlerts']), "High-severity system alerts blocking the packaging lane.", 4)}
+    </section>
+    <section class="component-grid">
+      {''.join(_component_card(component) for component in monitor["components"])}
+    </section>
+    <section class="grid-2plus">
+      {_line_chart()}
+      {_distribution_card()}
+    </section>
+    {_pipeline_topology()}
+    {_bundle_table()}
     """
     return _shell(
-        "Control-plane summary for privileged-review evidence flow.",
-        "Incident count, urgent lanes, bundle velocity, and operator recommendations at a glance.",
+        "Audit-ready evidence flow for privileged access work.",
+        "Control-plane view for sync volume, evidence packaging pressure, and the systems carrying the ServiceNow → CyberArk bridge.",
         "overview",
         body,
     )
 
 
 def render_pipeline_board() -> str:
-    queue = SERVICE.pipeline_board()
-    body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Pipeline board</strong>
-          <h2>The incidents most likely to need containment or evidence intervention first.</h2>
-          <p>This is the practical operator surface for deciding which ServiceNow records and CyberArk packets need manual attention before closure or certification moves ahead.</p>
-        </div>
-        <div class="section-body">
-          <div class="incident-grid">{"".join(_incident_card(item) for item in queue)}</div>
-        </div>
-      </section>
-    """
+    cards = []
+    for incident in SERVICE.pipeline_board():
+        cards.append(
+            f"""
+            <article class="incident-card">
+              <div class="incident-head">
+                <div class="incident-copy">
+                  <span class="eyebrow">{escape(incident["assignmentGroup"])}</span>
+                  <h3>{escape(incident["incidentId"])} · {escape(incident["accountName"])}</h3>
+                  <p>{escape(incident["topConcern"])}</p>
+                </div>
+                {_status_badge(incident["verdict"])}
+              </div>
+              <div class="incident-meta">
+                <div class="meta-chip"><span>Risk score</span><strong>{incident["riskScore"]}</strong></div>
+                <div class="meta-chip"><span>Artifacts</span><strong>{incident["approvalArtifacts"]} attached</strong></div>
+                <div class="meta-chip"><span>Evidence age</span><strong>{incident["evidenceAgeDays"]} days</strong></div>
+                <div class="meta-chip"><span>Next action</span><strong>{escape(incident["nextAction"])}</strong></div>
+              </div>
+            </article>
+            """
+        )
+    body = f'<section class="grid-3" style="grid-template-columns: 1fr;">{"".join(cards)}</section>'
     return _shell(
-        "Review queue for incident evidence pressure.",
-        "The incidents most likely to need evidence refresh or privileged-review escalation first.",
+        "Queue the incidents most likely to age into audit debt.",
+        "This lane keeps ServiceNow workflow state and CyberArk evidence quality visible together so reviewers know what to fix first.",
         "pipeline",
         body,
     )
 
 
 def render_bundles() -> str:
-    bundles = SERVICE.evidence_bundles()
-    rows = "".join(
-        f"""
-        <tr>
-          <td><strong>{escape(item["incidentId"])}</strong><div class="subtext">{escape(item["accountName"])} · {escape(item["assignmentGroup"])}</div></td>
-          <td>{escape(item["targetSystem"])}</td>
-          <td>{escape(item["verdict"])}</td>
-          <td>{"Yes" if item["bundleReady"] else "No"}</td>
-          <td>{escape(", ".join(item["requiredEvidence"]))}</td>
-        </tr>
-        """
-        for item in bundles
-    )
-    payload = json.dumps(bundles[0], indent=2)
-    body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Evidence bundles</strong>
-          <h2>Every incident becomes a reusable packet, not just a ticket comment.</h2>
-          <p>Bundle output preserves the governance targets, required evidence, and verdict so the record can move into audit and certification workflows cleanly.</p>
-        </div>
-        <div class="section-body">
-          <div class="insight-grid">
-            <div class="table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Incident</th>
-                    <th>Target system</th>
-                    <th>Verdict</th>
-                    <th>Bundle ready</th>
-                    <th>Required evidence</th>
-                  </tr>
-                </thead>
-                <tbody>{rows}</tbody>
-              </table>
-            </div>
-            <div class="code-panel">
-              <div class="code-head"><span>sample bundle</span><div class="lights"><i></i><i></i><i></i></div></div>
-              <pre><code>{escape(payload)}</code></pre>
-            </div>
-          </div>
-        </div>
-      </section>
-    """
+    rows = []
+    for bundle in SERVICE.evidence_bundles():
+        rows.append(
+            f"""
+            <article class="panel">
+              <span class="eyebrow">{escape(bundle["assignmentGroup"])}</span>
+              <h2>{escape(bundle["incidentId"])} · {escape(bundle["targetSystem"])}</h2>
+              <p>{escape(bundle["accountName"])} · {escape(', '.join(bundle["requiredEvidence"]))}</p>
+              <div class="grid-3" style="margin-top:18px;">
+                <div class="mini-panel"><h3>Risk score</h3><p>{bundle["riskScore"]}</p></div>
+                <div class="mini-panel"><h3>Bundle state</h3><p>{'Ready for review' if bundle['bundleReady'] else 'Needs enrichment'}</p></div>
+                <div class="mini-panel"><h3>Targets</h3><p>{escape(', '.join(bundle["governanceTargets"]))}</p></div>
+              </div>
+            </article>
+            """
+        )
+    body = f'<section class="grid-3" style="grid-template-columns: 1fr;">{"".join(rows)}</section>'
     return _shell(
-        "Evidence bundles for incident closure and audit workflows.",
-        "A packaging surface for turning ServiceNow and CyberArk context into review-safe records.",
+        "Turn incident state into reusable evidence packets.",
+        "Bundle output preserves the artifact checklist, review posture, and governance targets so audit work does not have to reconstruct the story later.",
         "bundles",
         body,
     )
 
 
 def render_audit_log() -> str:
-    logs = SERVICE.audit_log()
-    rows = []
-    for item in logs:
-        result_class = "result-good" if item["result"] == "Success" else "result-bad"
-        rows.append(
+    log_rows = []
+    for row in SERVICE.audit_log():
+        result = _status_badge("healthy" if row["result"] == "Success" else "critical")
+        log_rows.append(
             f"""
             <div class="log-line">
-              <div class="log-time">{escape(item["timestamp"])}</div>
-              <div class="log-action">{escape(item["action"])}</div>
-              <div class="log-resource"><strong>{escape(item["resource"])}</strong><span>{escape(item["detail"])}</span></div>
-              <div class="{result_class}">{escape(item["result"])}</div>
+              <time>{escape(row["timestamp"])}</time>
+              <strong>{escape(row["action"])}</strong>
+              <p><span style="font-weight:800;">{escape(row["resource"])}</span><br>{escape(row["detail"])}</p>
+              {result}
             </div>
             """
         )
+    terminal = "\n".join(SERVICE.terminal_feed())
     body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Audit evidence</strong>
-          <h2>A replayable log of incident pulls, vault enrichment, and bundle failures.</h2>
-          <p>The useful part is not just that the pipeline emits events. It is that a reviewer can reconstruct what moved, what failed, and which lane stayed unresolved.</p>
+    <section class="grid-2plus">
+      <div class="log-shell">
+        <div class="log-head">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="log-title">Advanced forensic audit trail</div>
         </div>
-        <div class="section-body">
-          <div class="log-shell">
-            <div class="log-head">
-              <div class="log-lights"><i></i><i></i><i></i></div>
-              <strong>System runtime logs · evidence bus</strong>
-            </div>
-            <div class="log-body">{"".join(rows)}</div>
-          </div>
+        <div class="log-body">{''.join(log_rows)}</div>
+      </div>
+      <div class="terminal-card">
+        <div class="log-head">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="log-title">Operator terminal</div>
         </div>
-      </section>
+        <pre>{escape(terminal)}</pre>
+      </div>
+    </section>
     """
     return _shell(
-        "Audit evidence for incident-to-vault packaging.",
-        "A replayable log of sync actions, bundle gaps, and review-lane escalation.",
+        "Replayable audit trail for enrichment, failure, and evidence emission.",
+        "The useful part is not just collecting events. It is making them legible to reviewers, auditors, and operators under time pressure.",
         "audit",
         body,
     )
 
 
 def render_integrations() -> str:
-    config = SERVICE.integration_posture()
-    targets = "".join(
-        f"""
-        <div class="integration-row">
-          <div>
-            <strong>{escape(item["name"])}</strong>
-            <span>{escape(item["type"])}</span>
-          </div>
-          <span class="toggle {'good' if item['enabled'] else 'bad'}">{'Enabled' if item['enabled'] else 'Standby'}</span>
-        </div>
-        """
-        for item in config["targets"]
-    )
+    posture = SERVICE.integration_posture()
+    target_rows = []
+    for target in posture["targets"]:
+        target_rows.append(
+            f"""
+            <div class="mini-panel">
+              <h3>{escape(target["name"])}</h3>
+              <p>{escape(target["type"])} · {'enabled' if target['enabled'] else 'disabled'}</p>
+            </div>
+            """
+        )
     body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Integration posture</strong>
-          <h2>The connectors and thresholds that make the evidence lane believable.</h2>
-          <p>This makes the repo feel like a real workflow component instead of a standalone analyzer. ServiceNow context, CyberArk context, and pipeline thresholds all stay visible together.</p>
-        </div>
-        <div class="section-body">
-          <div class="config-grid">
-            <div class="panel">
-              <h3>ServiceNow input</h3>
-              <div class="panel-grid">
-                <div class="config-row">
-                  <div><strong>Incident endpoint</strong><span>{escape(config["servicenow"]["apiBaseUrl"])}</span></div>
-                  <span class="toggle good">Live</span>
-                </div>
-                <div class="config-row">
-                  <div><strong>Authentication</strong><span>{escape(config["servicenow"]["authType"])}</span></div>
-                  <span class="toggle good">Bound</span>
-                </div>
-                <div class="config-row">
-                  <div><strong>State filter</strong><span>{escape(config["servicenow"]["stateFilter"])}</span></div>
-                  <span class="toggle good">Scoped</span>
-                </div>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>CyberArk enrichment</h3>
-              <div class="panel-grid">
-                <div class="config-row">
-                  <div><strong>Vault endpoint</strong><span>{escape(config["cyberark"]["apiBaseUrl"])}</span></div>
-                  <span class="toggle good">Live</span>
-                </div>
-                <div class="config-row">
-                  <div><strong>Authentication</strong><span>{escape(config["cyberark"]["authType"])}</span></div>
-                  <span class="toggle good">Strict</span>
-                </div>
-                <div class="config-row">
-                  <div><strong>Safe ownership sync</strong><span>Owner and dual-approval posture stay attached to each incident packet.</span></div>
-                  <span class="toggle {'good' if config['cyberark']['safeOwnershipSync'] else 'bad'}">{'Enabled' if config['cyberark']['safeOwnershipSync'] else 'Disabled'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <section class="page-section" style="margin-top:18px;">
-            <div class="section-head">
-              <strong>Target systems</strong>
-              <h2>Where the packaged evidence is expected to land.</h2>
-              <p>This is the practical handoff story: incidents, certification packs, and audit archives all consume the same structured record.</p>
-            </div>
-            <div class="section-body">
-              <div class="panel-grid">{targets}</div>
-            </div>
-          </section>
-        </div>
-      </section>
+    <section class="grid-3">
+      <div class="panel">
+        <span class="eyebrow">ServiceNow</span>
+        <h2>Incident intake contract</h2>
+        <p>{escape(posture["servicenow"]["authType"])} · {escape(posture["servicenow"]["stateFilter"])}</p>
+      </div>
+      <div class="panel">
+        <span class="eyebrow">CyberArk</span>
+        <h2>Vault enrichment contract</h2>
+        <p>{escape(posture["cyberark"]["authType"])} · {escape(posture["cyberark"]["dualApprovalModel"])}</p>
+      </div>
+      <div class="panel">
+        <span class="eyebrow">Pipeline</span>
+        <h2>Packaging cadence</h2>
+        <p>{posture["pipeline"]["intervalMinutes"]}-minute cadence · {escape(posture["pipeline"]["bundleExportFormat"])}</p>
+      </div>
+    </section>
+    <section class="grid-3">{''.join(target_rows)}</section>
     """
     return _shell(
-        "Configuration and target-system posture for the evidence lane.",
-        "ServiceNow inputs, CyberArk enrichment, and the systems this pipeline is meant to feed.",
+        "Integration posture across the intake, enrichment, and export layers.",
+        "This surface keeps the connector story grounded: what is being called, how it is authenticated, and where the evidence packages are allowed to land.",
         "integrations",
         body,
     )
 
 
-def render_methodology() -> str:
-    payload = json.dumps(SERVICE.sample_payload(), indent=2)
+def render_security_architecture() -> str:
+    architecture = SERVICE.security_architecture()
+    nodes = architecture["nodes"]
     body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>Methodology</strong>
-          <h2>How the pipeline decides what belongs in the urgent lane.</h2>
-          <p>The score is deliberately built from priority, evidence freshness, artifact depth, ownership quality, and exception pressure so the queue feels operational instead of arbitrary.</p>
-        </div>
-        <div class="section-body">
-          <div class="insight-grid">
-            <div class="panel">
-              <h3>Scoring factors</h3>
-              <div class="panel-grid">
-                <div class="metric-card">
-                  <div class="micro">Evidence freshness</div>
-                  <div class="title">Old or missing evidence should rise quickly.</div>
-                  <div class="desc">An incident cannot become governance-safe if the underlying proof is stale or absent.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">Approval chain</div>
-                  <div class="title">Artifacts and ticket links matter together.</div>
-                  <div class="desc">The pipeline keeps dual approval, manager verification, and artifact depth close together so the packet stays defensible.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">Exception pressure</div>
-                  <div class="title">Repeated exceptions should not hide in routine workflow state.</div>
-                  <div class="desc">The point is to surface exception-heavy records before they quietly age into audit debt.</div>
-                </div>
-              </div>
-            </div>
-            <div class="code-panel">
-              <div class="code-head"><span>/api/sample</span><div class="lights"><i></i><i></i><i></i></div></div>
-              <pre><code>{escape(payload)}</code></pre>
+    <section class="grid-2plus">
+      <div class="panel">
+        <span class="eyebrow">System architecture diagram</span>
+        <h2>Bridge the incident system, the vault, and the evidence archive.</h2>
+        <div class="topology-grid">
+          <article class="topology-card">
+            <span class="eyebrow">{escape(nodes[0]["type"])}</span>
+            <h4>{escape(nodes[0]["name"])}</h4>
+            <p>{escape(nodes[0]["summary"])}</p>
+          </article>
+          <div class="topology-core">
+            <div class="core-orbit">
+              <div class="core-icon">▣</div>
+              <h4>{escape(nodes[1]["name"])}</h4>
+              <p>{escape(nodes[1]["summary"])}</p>
+              <div class="core-dots"><i></i><i></i><i></i></div>
             </div>
           </div>
+          <article class="topology-card target">
+            <span class="eyebrow">{escape(nodes[2]["type"])}</span>
+            <h4>{escape(nodes[2]["name"])}</h4>
+            <p>{escape(nodes[2]["summary"])}</p>
+          </article>
         </div>
-      </section>
+        <div class="mini-panel" style="margin-top:18px;">
+          <h3>{escape(nodes[3]["name"])}</h3>
+          <p>{escape(nodes[3]["summary"])}</p>
+        </div>
+      </div>
+      <div class="grid-3" style="grid-template-columns: 1fr; margin-top:0;">
+        <div class="panel">
+          <span class="eyebrow">Credential mgmt</span>
+          <h2>Secret handling posture</h2>
+          {''.join(f'<div class="mini-panel" style="margin-top:14px;"><h3>{escape(item["title"])}</h3><p>{escape(item["detail"])}</p></div>' for item in architecture["credentials"])}
+        </div>
+        <div class="panel" style="background: linear-gradient(180deg, #f7fcfb, #f9fffd);">
+          <span class="eyebrow">Transit security</span>
+          <h2>Transport safeguards</h2>
+          <div class="panel" style="padding:0; border:none; box-shadow:none; background:transparent;">
+            {"".join(f'<div class="mini-panel" style="margin-top:12px;"><p>{escape(item)}</p></div>' for item in architecture["transitControls"])}
+          </div>
+        </div>
+        <div class="distribution-card">
+          <span class="eyebrow">Access control</span>
+          {"".join(f'<div class="dist-row"><div class="dist-top"><strong>{escape(role["name"])}</strong></div><p style="margin:8px 0 0;color:#b7c5dc;line-height:1.6;">{escape(role["detail"])}</p></div>' for role in architecture["accessRoles"])}
+        </div>
+      </div>
+    </section>
     """
     return _shell(
-        "Methodology behind privileged-review evidence prioritization.",
-        "How the pipeline turns ticket state and vault metadata into review priority and bundle readiness.",
+        "Security and architecture posture for the evidence bridge.",
+        "This view makes the bridge legible to security reviewers: credential handling, transit safeguards, access roles, and the systems carrying the audit narrative.",
+        "architecture",
+        body,
+    )
+
+
+def render_monitor() -> str:
+    monitor = SERVICE.health_monitor()
+    cards = "".join(_component_card(component) for component in monitor["components"])
+    body = f"""
+    <section class="grid-2plus">
+      <div class="panel">
+        <span class="eyebrow">System health monitor</span>
+        <h2>Real-time infrastructure telemetry for the evidence bridge.</h2>
+        <div class="component-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">{cards}</div>
+      </div>
+      <div class="distribution-card">
+        <span class="eyebrow">Aggregate resource pool</span>
+        <div class="dist-row">
+          <div class="dist-top"><strong>Avg CPU</strong><span>{monitor["totals"]["avgCpu"]}%</span></div>
+          <div class="progress-track dark"><div class="progress-fill violet" style="width:{round(monitor["totals"]["avgCpu"])}%"></div></div>
+        </div>
+        <div class="dist-row">
+          <div class="dist-top"><strong>Avg memory</strong><span>{monitor["totals"]["avgMemGb"]}GB</span></div>
+          <div class="progress-track dark"><div class="progress-fill hot" style="width:62%"></div></div>
+        </div>
+        <div class="dist-row">
+          <div class="dist-top"><strong>Total net I/O</strong><span>{monitor["totals"]["totalNetIoMb"]} MB/s</span></div>
+          <div class="progress-track dark"><div class="progress-fill good" style="width:74%"></div></div>
+        </div>
+        <div class="dist-foot"><span>Cluster status</span><strong>{monitor["totals"]["clusterNodes"]} nodes OK</strong></div>
+      </div>
+    </section>
+    """
+    return _shell(
+        "Monitor the bridge infrastructure, not just the ticket queue.",
+        "The control plane should surface resource posture, API latency, and component load before evidence quality starts to slide.",
+        "monitor",
+        body,
+    )
+
+
+def render_methodology() -> str:
+    body = """
+    <section class="grid-3">
+      <div class="panel">
+        <span class="eyebrow">Scoring inputs</span>
+        <h2>Risk is driven by evidence age, approvals, owners, and exception pressure.</h2>
+        <p>The service scores each incident across priority, evidence freshness, artifact depth, manager verification, dual-approval expectations, exception count, and owner quality.</p>
+      </div>
+      <div class="panel">
+        <span class="eyebrow">Bundle logic</span>
+        <h2>A record is only review-ready when the packet is defensible.</h2>
+        <p>Bundle-ready status requires enough attached artifacts, ticket linkage, manager verification, and a fresh evidence window.</p>
+      </div>
+      <div class="panel">
+        <span class="eyebrow">Operator intent</span>
+        <h2>The lane is built for governance teams, not vanity dashboards.</h2>
+        <p>The UI exists to tell operators what is fragile, what is aging, and what can close safely into a certification or audit cycle.</p>
+      </div>
+    </section>
+    """
+    return _shell(
+        "How the evidence bridge decides what is safe, stale, or escalation-worthy.",
+        "The methodology is deliberately simple and auditable so operators can explain why a packet was promoted, paused, or forced back into evidence refresh.",
         "methodology",
         body,
     )
 
 
 def render_docs() -> str:
-    payload = json.dumps(SERVICE.sample_payload(), indent=2)
+    routes = [
+        ("/", "Dashboard overview and traffic posture"),
+        ("/pipeline-board", "Incident review queue with evidence pressure"),
+        ("/bundles", "Evidence packet output and downstream targets"),
+        ("/monitor", "Infrastructure telemetry and component health"),
+        ("/security-architecture", "Security review surface for the bridge"),
+        ("/audit-log", "Replayable forensic trail and terminal output"),
+        ("/api/dashboard/summary", "Top-line metrics for embeddings or widgets"),
+        ("/api/incidents", "Modeled incident catalog"),
+        ("/api/bundles", "Evidence packet summaries"),
+        ("/api/health", "Monitor telemetry snapshot"),
+        ("/api/security-architecture", "Security posture model"),
+        ("/api/terminal", "Terminal-style operator feed"),
+    ]
+    rows = "".join(
+        f'<tr><td><strong>{escape(path)}</strong></td><td>{escape(desc)}</td></tr>'
+        for path, desc in routes
+    )
     body = f"""
-      <section class="page-section">
-        <div class="section-head">
-          <strong>API summary</strong>
-          <h2>Structured outputs for incident, review, and audit workflows.</h2>
-          <p>The payload is designed to plug into ServiceNow updates, governance archives, or certification packs without losing the operator-readable explanation layer.</p>
-        </div>
-        <div class="section-body">
-          <div class="insight-grid">
-            <div class="panel">
-              <div class="panel-grid">
-                <div class="metric-card">
-                  <div class="micro">GET /api/incidents</div>
-                  <div class="title">Incident catalog</div>
-                  <div class="desc">Returns the ranked incident surface with vault context, evidence age, and next actions attached.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">GET /api/bundles</div>
-                  <div class="title">Bundle output</div>
-                  <div class="desc">Returns the packaged evidence records for governance, audit, and certification handoff.</div>
-                </div>
-                <div class="metric-card">
-                  <div class="micro">GET /api/integrations</div>
-                  <div class="title">Integration posture</div>
-                  <div class="desc">Returns the ServiceNow input, CyberArk enrichment, and target-system configuration story.</div>
-                </div>
-              </div>
-            </div>
-            <div class="code-panel">
-              <div class="code-head"><span>/api/sample</span><div class="lights"><i></i><i></i><i></i></div></div>
-              <pre><code>{escape(payload)}</code></pre>
-            </div>
-          </div>
-        </div>
-      </section>
+    <section class="table-card">
+      <table>
+        <thead>
+          <tr><th>Route</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
     """
     return _shell(
-        "API summary for evidence packaging and review workflows.",
-        "The pipeline emits structured incident-review decisions that can feed broader governance systems.",
+        "Route surface for the evidence bridge.",
+        "The HTML routes are meant for proof and operator review; the JSON routes are there so the same posture can feed other systems or dashboards.",
         "docs",
         body,
     )

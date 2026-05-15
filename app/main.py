@@ -9,17 +9,19 @@ from app.render import (
     render_docs,
     render_integrations,
     render_methodology,
+    render_monitor,
     render_overview,
     render_pipeline_board,
+    render_security_architecture,
 )
 from app.services.evidence_pipeline_service import build_service
 
 app = FastAPI(
     title="ServiceNow CyberArk Evidence Pipeline",
-    version="0.1.0",
+    version="0.2.0",
     description=(
         "FastAPI pipeline for collecting ServiceNow and CyberArk access-change events into "
-        "audit-ready evidence records and privileged-review approval artifacts."
+        "audit-ready evidence records, security posture context, and privileged-review approval artifacts."
     ),
 )
 
@@ -49,6 +51,16 @@ def audit_log() -> str:
 @app.get("/integrations", response_class=HTMLResponse)
 def integrations() -> str:
     return render_integrations()
+
+
+@app.get("/security-architecture", response_class=HTMLResponse)
+def security_architecture() -> str:
+    return render_security_architecture()
+
+
+@app.get("/monitor", response_class=HTMLResponse)
+def monitor() -> str:
+    return render_monitor()
 
 
 @app.get("/methodology", response_class=HTMLResponse)
@@ -97,6 +109,21 @@ def audit_api() -> list[dict]:
 @app.get("/api/integrations")
 def integrations_api() -> dict:
     return SERVICE.integration_posture()
+
+
+@app.get("/api/health")
+def health_api() -> dict:
+    return SERVICE.health_monitor()
+
+
+@app.get("/api/security-architecture")
+def security_architecture_api() -> dict:
+    return SERVICE.security_architecture()
+
+
+@app.get("/api/terminal")
+def terminal_api() -> list[str]:
+    return SERVICE.terminal_feed()
 
 
 @app.get("/api/sample")

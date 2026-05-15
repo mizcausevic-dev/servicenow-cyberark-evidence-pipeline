@@ -18,6 +18,8 @@ def main() -> None:
         "/",
         "/pipeline-board",
         "/bundles",
+        "/monitor",
+        "/security-architecture",
         "/audit-log",
         "/integrations",
         "/methodology",
@@ -27,6 +29,9 @@ def main() -> None:
         "/api/pipeline-board",
         "/api/bundles",
         "/api/audit",
+        "/api/health",
+        "/api/security-architecture",
+        "/api/terminal",
         "/api/integrations",
         "/api/sample",
     ]

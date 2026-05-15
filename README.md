@@ -1,10 +1,10 @@
 # ServiceNow CyberArk Evidence Pipeline
 
-FastAPI pipeline for **collecting ServiceNow and CyberArk access-change events into audit-ready evidence records and privileged-review approval artifacts**.
+FastAPI pipeline for **collecting ServiceNow and CyberArk access-change events into audit-ready evidence records, security posture context, and privileged-review approval artifacts**.
 
 > **What this repo proves**
 >
-> Incident workflow becomes much more useful when ticket state, vault context, approval artifacts, and governance handoff targets all stay visible in the same lane.
+> Incident workflow becomes much more useful when ticket state, vault context, approval artifacts, transport posture, and governance handoff targets all stay visible in the same lane.
 
 ## Why this repo exists
 
@@ -20,8 +20,8 @@ Most privileged-access workflows split the truth across too many systems:
 ## Screenshots
 
 ![Overview](./screenshots/01-overview.svg)
-![Pipeline board](./screenshots/02-pipeline-board.svg)
-![Bundles](./screenshots/03-bundles.svg)
+![System monitor](./screenshots/02-monitor.svg)
+![Security and architecture](./screenshots/03-security-architecture.svg)
 ![Audit log](./screenshots/04-audit-log.svg)
 
 ## What it includes
@@ -29,6 +29,8 @@ Most privileged-access workflows split the truth across too many systems:
 - Python + FastAPI service with HTML proof surfaces and JSON APIs
 - modeled ServiceNow incident feed plus CyberArk safe/account enrichment
 - risk scoring across priority, evidence age, artifact depth, ownership quality, dual approval, and exception pressure
+- system monitor surface for sync throughput, latency, component load, and resource posture
+- security and architecture surface for credential handling, transport safeguards, and role posture
 - evidence bundle surface for governance, certification, and audit handoff
 - integration posture view for ServiceNow inputs, CyberArk enrichment, and downstream targets
 - screenshot generator, docs, origin story, changelog, tests, and CI
@@ -47,6 +49,8 @@ Then open:
 - `http://127.0.0.1:5059/`
 - `http://127.0.0.1:5059/pipeline-board`
 - `http://127.0.0.1:5059/bundles`
+- `http://127.0.0.1:5059/monitor`
+- `http://127.0.0.1:5059/security-architecture`
 - `http://127.0.0.1:5059/audit-log`
 - `http://127.0.0.1:5059/integrations`
 - `http://127.0.0.1:5059/docs`
@@ -75,6 +79,9 @@ $env:PORT = "5064"
 - `GET /api/pipeline-board`
 - `GET /api/bundles`
 - `GET /api/audit`
+- `GET /api/health`
+- `GET /api/security-architecture`
+- `GET /api/terminal`
 - `GET /api/integrations`
 - `GET /api/sample`
 

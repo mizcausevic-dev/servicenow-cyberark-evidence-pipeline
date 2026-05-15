@@ -21,6 +21,7 @@ class ServiceNowCyberArkEvidencePipelineService:
         stale = sum(1 for item in catalog if item["staleEvidence"])
         open_exceptions = sum(item["exceptionCount"] for item in self.incidents)
         highest = max(catalog, key=lambda item: item["riskScore"])
+        monitor = self.health_monitor()
         return {
             "incidentCount": len(self.incidents),
             "urgentCount": urgent,
@@ -33,6 +34,10 @@ class ServiceNowCyberArkEvidencePipelineService:
             "averageEvidenceAge": round(mean(item["evidenceAgeDays"] for item in self.incidents), 1),
             "highestRiskIncident": highest["incidentId"],
             "leadRecommendation": self._lead_recommendation(catalog),
+            "totalSyncs24h": monitor["totals"]["syncs24h"],
+            "pipelineSuccess": monitor["totals"]["pipelineSuccess"],
+            "cyberarkLatencyMs": monitor["totals"]["cyberarkLatencyMs"],
+            "criticalAlerts": monitor["totals"]["criticalAlerts"],
         }
 
     def incident_catalog(self) -> list[dict]:
@@ -69,17 +74,18 @@ class ServiceNowCyberArkEvidencePipelineService:
             "highestRiskIncident": catalog[0],
             "pipelineBoard": self.pipeline_board()[:4],
             "bundleExcerpt": self.evidence_bundles()[:3],
+            "architecture": self.security_architecture(),
         }
 
     def sync_velocity(self) -> list[dict]:
         return [
-            {"day": "Mon", "bundles": 4, "closures": 1},
-            {"day": "Tue", "bundles": 7, "closures": 2},
-            {"day": "Wed", "bundles": 9, "closures": 2},
-            {"day": "Thu", "bundles": 11, "closures": 3},
-            {"day": "Fri", "bundles": 13, "closures": 4},
-            {"day": "Sat", "bundles": 6, "closures": 1},
-            {"day": "Sun", "bundles": 5, "closures": 1}
+            {"hour": "08:00", "syncs": 1284, "bundles": 4, "latencyMs": 118},
+            {"hour": "10:00", "syncs": 1640, "bundles": 7, "latencyMs": 126},
+            {"hour": "12:00", "syncs": 1492, "bundles": 9, "latencyMs": 122},
+            {"hour": "14:00", "syncs": 1784, "bundles": 11, "latencyMs": 139},
+            {"hour": "16:00", "syncs": 1926, "bundles": 13, "latencyMs": 142},
+            {"hour": "18:00", "syncs": 1532, "bundles": 6, "latencyMs": 130},
+            {"hour": "20:00", "syncs": 1328, "bundles": 5, "latencyMs": 120},
         ]
 
     def audit_log(self) -> list[dict]:
@@ -90,6 +96,7 @@ class ServiceNowCyberArkEvidencePipelineService:
                 "action": "INCIDENT_PULL_STARTED",
                 "resource": "ServiceNow incident feed",
                 "result": "Success",
+                "latencyMs": 24,
                 "detail": "Fresh incident set pulled for privileged-access evidence packaging.",
             },
             {
@@ -97,6 +104,7 @@ class ServiceNowCyberArkEvidencePipelineService:
                 "action": "CYBERARK_ENRICHMENT_ATTACHED",
                 "resource": highest["accountName"],
                 "result": "Success",
+                "latencyMs": 142,
                 "detail": "Vault metadata, safe ownership, and evidence age attached to the incident packet.",
             },
             {
@@ -104,6 +112,7 @@ class ServiceNowCyberArkEvidencePipelineService:
                 "action": "BUNDLE_GAP_FLAGGED",
                 "resource": "Breakglass rotation exception",
                 "result": "Failure",
+                "latencyMs": 91,
                 "detail": "Evidence packet still lacks approval artifacts and manager verification.",
             },
             {
@@ -111,6 +120,7 @@ class ServiceNowCyberArkEvidencePipelineService:
                 "action": "REVIEW_PACKET_EMITTED",
                 "resource": "Quarterly certification export",
                 "result": "Success",
+                "latencyMs": 33,
                 "detail": "Structured payload emitted for downstream governance and audit workflows.",
             },
             {
@@ -118,9 +128,135 @@ class ServiceNowCyberArkEvidencePipelineService:
                 "action": "OWNER_LANE_ESCALATED",
                 "resource": "Non-Prod Hygiene",
                 "result": "Failure",
+                "latencyMs": 56,
                 "detail": "Unassigned account evidence lane remains unresolved beyond the expected closure window.",
             },
         ]
+
+    def terminal_feed(self) -> list[str]:
+        return [
+            "[boot] Evidence pipeline online. ServiceNow incident cursor resumed from 2026-05-15T08:58:11Z.",
+            "[sync] Pulled 17 incident candidates from ServiceNow evidence lane.",
+            "[ok] Attached CyberArk safe metadata to PROD-BREAKGLASS-API (latency 142ms).",
+            "[warn] INC0021906 still missing manager attestation and second approval artifact.",
+            "[emit] Quarterly certification packet refreshed for Q2 reviewer bundle.",
+            "[alert] Non-prod orphaned admin account still lacks an accountable owner lane.",
+        ]
+
+    def health_monitor(self) -> dict:
+        components = [
+            {
+                "name": "Source Ingestion",
+                "icon": "ingest",
+                "cpu": 21,
+                "ramGb": 1.3,
+                "networkMb": 15,
+                "errorRate": 0.01,
+                "status": "healthy",
+            },
+            {
+                "name": "Vault Gateway",
+                "icon": "vault",
+                "cpu": 35,
+                "ramGb": 2.6,
+                "networkMb": 7,
+                "errorRate": 0.0,
+                "status": "healthy",
+            },
+            {
+                "name": "Compute Cluster",
+                "icon": "compute",
+                "cpu": 76,
+                "ramGb": 16.0,
+                "networkMb": 123,
+                "errorRate": 0.04,
+                "status": "watch",
+            },
+            {
+                "name": "Storage Sink",
+                "icon": "storage",
+                "cpu": 23,
+                "ramGb": 0.7,
+                "networkMb": 51,
+                "errorRate": 0.0,
+                "status": "healthy",
+            },
+        ]
+        return {
+            "totals": {
+                "syncs24h": 12842,
+                "cyberarkLatencyMs": 142,
+                "pipelineSuccess": 99.98,
+                "criticalAlerts": 0,
+                "apiResponseMs": 24,
+                "avgCpu": 42.8,
+                "avgMemGb": 12.4,
+                "totalNetIoMb": 192.4,
+                "clusterNodes": 14,
+                "activeProcesses": 42,
+            },
+            "components": components,
+            "distribution": [
+                {"name": "Worker Cluster A", "share": 68},
+                {"name": "Worker Cluster B", "share": 42},
+            ],
+        }
+
+    def security_architecture(self) -> dict:
+        return {
+            "nodes": [
+                {
+                    "name": "ServiceNow",
+                    "type": "ITSM / GRC Module",
+                    "summary": "Source of ticket state, workflow ownership, and audit handoff timing.",
+                    "status": "online",
+                },
+                {
+                    "name": "Evidence Pipeline",
+                    "type": "FastAPI Core",
+                    "summary": "Maps incidents, vault context, and review metadata into audit-ready bundles.",
+                    "status": "active",
+                },
+                {
+                    "name": "CyberArk Vault",
+                    "type": "PAM Enterprise",
+                    "summary": "Provides safe metadata, account posture, and privileged-action context.",
+                    "status": "online",
+                },
+                {
+                    "name": "Artifact Storage",
+                    "type": "Evidence Archive",
+                    "summary": "Stores structured exports for quarterly certification and audit replay.",
+                    "status": "online",
+                },
+            ],
+            "credentials": [
+                {
+                    "title": "Secret Masking",
+                    "detail": "Credential material is modeled as vault-managed references, not plain-text runtime variables.",
+                },
+                {
+                    "title": "Least Privilege",
+                    "detail": "Service accounts stay restricted to evidence-safe APIs and GRC export surfaces only.",
+                },
+            ],
+            "transitControls": [
+                "Mutual TLS for API handshake",
+                "AES-256 payload encryption",
+                "SHA-256 integrity verification",
+                "Isolated pipeline subnet",
+            ],
+            "accessRoles": [
+                {
+                    "name": "Pipeline Admin",
+                    "detail": "Restricted to SSO-authenticated infrastructure owners with breakglass review rights.",
+                },
+                {
+                    "name": "Audit / Read Only",
+                    "detail": "Mapped to ServiceNow GRC reviewers and quarterly certification operators.",
+                },
+            ],
+        }
 
     def integration_posture(self) -> dict:
         return {
@@ -145,7 +281,7 @@ class ServiceNowCyberArkEvidencePipelineService:
                 {"name": "ServiceNow incident update", "type": "workflow", "enabled": True},
                 {"name": "Quarterly certification pack", "type": "evidence export", "enabled": True},
                 {"name": "Privileged access audit vault", "type": "governance archive", "enabled": True},
-                {"name": "Auto-close stale incidents", "type": "remediation", "enabled": False}
+                {"name": "Auto-close stale incidents", "type": "remediation", "enabled": False},
             ],
         }
 

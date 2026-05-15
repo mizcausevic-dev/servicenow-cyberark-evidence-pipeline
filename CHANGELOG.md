@@ -6,6 +6,8 @@
 - shipped FastAPI routes, HTML proof surfaces, screenshots, docs, and CI
 - added incident scoring, evidence bundle packaging, integration posture, and audit log surfaces
 - exposed a structured API for incident packets, bundle outputs, and governance-ready sample payloads
+- upgraded the presentation layer with a monitor surface, security and architecture view, and denser audit storytelling
+- refreshed the README proof assets to reflect the improved control-room shell instead of generic placeholder cards
 
 ## 0.1.0 - 2026-02-26
 

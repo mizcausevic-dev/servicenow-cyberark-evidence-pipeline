@@ -11,231 +11,277 @@ if str(ROOT) not in sys.path:
 from app.services.evidence_pipeline_service import build_service
 
 
+SERVICE = build_service()
 OUT_DIR = ROOT / "screenshots"
 OUT_DIR.mkdir(exist_ok=True)
-
 WIDTH = 1600
 HEIGHT = 980
 
 
-def shell(title: str, subtitle: str, body: str, active: str) -> str:
-    nav = [
-        ("OVERVIEW", "overview"),
-        ("PIPELINE BOARD", "pipeline"),
-        ("BUNDLES", "bundles"),
-        ("AUDIT LOG", "audit"),
+def _page_shell(title: str, subtitle: str, body: str, active: str) -> str:
+    tabs = [
+        ("Dashboard", "overview"),
+        ("Security & Architecture", "architecture"),
+        ("Audit Trail", "audit"),
     ]
-    nav_rows = []
-    y = 164
-    for label, key in nav:
+    tab_markup = []
+    x = 384
+    for label, key in tabs:
         if key == active:
-            nav_rows.append(
-                f"<rect x='26' y='{y}' width='208' height='42' rx='14' fill='rgba(116,200,255,0.08)' stroke='rgba(116,200,255,0.16)'/>"
-                f"<text x='42' y='{y + 26}' fill='#74c8ff' font-size='12' font-family='Segoe UI' letter-spacing='2'>{label}</text>"
+            tab_markup.append(
+                f"<rect x='{x}' y='22' width='176' height='54' rx='16' fill='#5d5cf6'/>"
+                f"<text x='{x + 88}' y='56' text-anchor='middle' fill='white' font-size='14' font-family='Segoe UI' font-weight='700'>{escape(label)}</text>"
             )
+            x += 188
         else:
-            nav_rows.append(f"<text x='42' y='{y + 26}' fill='#7f92ae' font-size='12' font-family='Segoe UI' letter-spacing='2'>{label}</text>")
-        y += 46
+            tab_markup.append(
+                f"<text x='{x + 88}' y='56' text-anchor='middle' fill='#b9c5dc' font-size='14' font-family='Segoe UI' font-weight='700'>{escape(label)}</text>"
+            )
+            x += 214
     return f"""<svg xmlns='http://www.w3.org/2000/svg' width='{WIDTH}' height='{HEIGHT}' viewBox='0 0 {WIDTH} {HEIGHT}'>
   <defs>
-    <linearGradient id='bg' x1='0' x2='0' y1='0' y2='1'>
-      <stop offset='0%' stop-color='#02050a'/>
-      <stop offset='100%' stop-color='#07101b'/>
+    <linearGradient id='nav' x1='0' x2='0' y1='0' y2='1'>
+      <stop offset='0%' stop-color='#141d33'/>
+      <stop offset='100%' stop-color='#121a2f'/>
     </linearGradient>
-    <linearGradient id='hero' x1='0' x2='1' y1='0' y2='1'>
-      <stop offset='0%' stop-color='#09101c'/>
-      <stop offset='100%' stop-color='#07101b'/>
-    </linearGradient>
-    <linearGradient id='blue' x1='0' x2='1' y1='0' y2='0'>
-      <stop offset='0%' stop-color='#0f8fbf'/>
-      <stop offset='100%' stop-color='#5d78ff'/>
-    </linearGradient>
+    <filter id='shadow' x='-20%' y='-20%' width='140%' height='140%'>
+      <feDropShadow dx='0' dy='18' stdDeviation='22' flood-color='rgba(22,32,55,0.12)'/>
+    </filter>
   </defs>
-  <rect width='{WIDTH}' height='{HEIGHT}' fill='url(#bg)'/>
-  <rect x='0' y='0' width='260' height='{HEIGHT}' fill='rgba(0,0,0,0.32)'/>
-  <rect x='22' y='26' width='216' height='64' rx='20' fill='rgba(255,255,255,0.03)' stroke='rgba(255,255,255,0.08)'/>
-  <rect x='36' y='38' width='40' height='40' rx='12' fill='url(#blue)'/>
-  <text x='56' y='63' text-anchor='middle' fill='#ffffff' font-size='16' font-family='Segoe UI' font-weight='700'>SE</text>
-  <text x='90' y='58' fill='#f6f8fe' font-size='15' font-family='Segoe UI' font-weight='700'>ServiceNow CyberArk Evidence Pipeline</text>
-  <text x='90' y='76' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>INSTANCE: EVIDENCE-BUS</text>
-  <text x='36' y='142' fill='#74c8ff' font-size='11' font-family='Segoe UI' letter-spacing='4'>ACTIVE VIEWS</text>
-  {''.join(nav_rows)}
-  <rect x='260' y='0' width='{WIDTH - 260}' height='72' fill='rgba(0,0,0,0.34)'/>
-  <rect x='260' y='72' width='{WIDTH - 260}' height='1' fill='rgba(255,255,255,0.08)'/>
-  <rect x='294' y='20' width='240' height='30' rx='15' fill='rgba(116,200,255,0.05)' stroke='rgba(116,200,255,0.14)'/>
-  <circle cx='314' cy='35' r='5' fill='#74c8ff'/>
-  <text x='330' y='39' fill='#b9e1ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>EVIDENCE PIPELINE LIVE</text>
-  <rect x='1270' y='16' width='270' height='38' rx='19' fill='url(#blue)'/>
-  <text x='1405' y='39' fill='#ffffff' text-anchor='middle' font-size='10' font-family='Segoe UI' font-weight='700' letter-spacing='3'>OPEN API DOCS</text>
-  <rect x='294' y='104' width='1240' height='248' rx='28' fill='url(#hero)' stroke='rgba(120,163,214,0.18)'/>
-  <text x='332' y='146' fill='#74c8ff' font-size='11' font-family='Segoe UI' letter-spacing='5'>SERVICENOW CYBERARK EVIDENCE PIPELINE</text>
-  <text x='332' y='212' fill='#f6f8fe' font-size='44' font-family='Georgia' font-weight='700'>{escape(title)}</text>
-  <text x='332' y='248' fill='#96a9c6' font-size='21' font-family='Segoe UI'>{escape(subtitle)}</text>
+  <rect width='{WIDTH}' height='{HEIGHT}' fill='#eef2f7'/>
+  <rect x='0' y='0' width='{WIDTH}' height='96' fill='url(#nav)'/>
+  <rect x='30' y='22' width='52' height='52' rx='12' fill='#5d5cf6'/>
+  <text x='56' y='57' text-anchor='middle' fill='white' font-size='26' font-family='Segoe UI' font-weight='700'>P</text>
+  <text x='106' y='44' fill='white' font-size='22' font-family='Segoe UI' font-weight='700'>Evidence Pipeline</text>
+  <text x='106' y='67' fill='#b9c5dc' font-size='12' font-family='Segoe UI'>ServiceNow → CyberArk Bridge</text>
+  <rect x='356' y='16' width='642' height='64' rx='18' fill='#202a41'/>
+  {''.join(tab_markup)}
+  <rect x='1110' y='22' width='132' height='52' rx='16' fill='#1f2a42' stroke='rgba(255,255,255,0.08)'/>
+  <text x='1176' y='55' text-anchor='middle' fill='#cad5ea' font-size='14' font-family='Segoe UI' font-weight='700'>Monitor</text>
+  <rect x='1256' y='22' width='140' height='52' rx='16' fill='#1f2a42' stroke='rgba(255,255,255,0.08)'/>
+  <text x='1326' y='55' text-anchor='middle' fill='#cad5ea' font-size='14' font-family='Segoe UI' font-weight='700'>Terminal</text>
+  <circle cx='1422' cy='48' r='6' fill='#14d18a'/>
+  <text x='1442' y='54' fill='#14d18a' font-size='16' font-family='Segoe UI' font-weight='700'>SYSTEM ACTIVE</text>
+  <rect x='28' y='124' width='1544' height='826' rx='28' fill='white' filter='url(#shadow)'/>
+  <text x='60' y='168' fill='#7c8ea9' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='3'>{escape(title.upper())}</text>
+  <text x='60' y='206' fill='#1b2a41' font-size='24' font-family='Segoe UI' font-weight='700'>{escape(subtitle)}</text>
   {body}
 </svg>"""
 
 
-def stat_card(x: int, y: int, label: str, value: str, sub: str) -> str:
-    return f"""
-  <rect x='{x}' y='{y}' width='280' height='132' rx='20' fill='rgba(255,255,255,0.04)' stroke='rgba(255,255,255,0.06)'/>
-  <text x='{x + 22}' y='{y + 28}' fill='#71839d' font-size='10' font-family='Segoe UI' letter-spacing='3'>{escape(label.upper())}</text>
-  <text x='{x + 22}' y='{y + 72}' fill='#f6f8fe' font-size='38' font-family='Segoe UI' font-weight='700'>{escape(value)}</text>
-  <text x='{x + 22}' y='{y + 102}' fill='#96a9c6' font-size='14' font-family='Segoe UI'>{escape(sub)}</text>
-    """
+def _progress(x: int, y: int, width: int, progress: int, fill: str) -> str:
+    return (
+        f"<rect x='{x}' y='{y}' width='{width}' height='8' rx='4' fill='#edf1f6'/>"
+        f"<rect x='{x}' y='{y}' width='{round(width * (progress / 100))}' height='8' rx='4' fill='{fill}'/>"
+    )
 
 
 def overview_svg() -> str:
-    service = build_service()
-    summary = service.summary()
-    velocity = service.sync_velocity()
-    max_bundles = max(item["bundles"] for item in velocity)
-    chart = []
-    x = 376
-    for item in velocity:
-        height = max(20, round((item["bundles"] / max_bundles) * 108))
-        top = 704 - height
-        chart.append(
-            f"""
-  <rect x='{x}' y='{top}' width='70' height='{height}' rx='16' fill='url(#blue)' opacity='0.92'/>
-  <text x='{x + 35}' y='730' text-anchor='middle' fill='#f6f8fe' font-size='14' font-family='Segoe UI' font-weight='700'>{item["bundles"]}</text>
-  <text x='{x + 35}' y='752' text-anchor='middle' fill='#96a9c6' font-size='10' font-family='Segoe UI' letter-spacing='2'>{item["day"].upper()}</text>
-            """
-        )
-        x += 88
-    body = [
-        stat_card(332, 274, "Incidents", str(summary["incidentCount"]), "Incidents currently modeled for evidence packaging."),
-        stat_card(628, 274, "Urgent lanes", str(summary["urgentCount"]), "Records that should be forced through evidence refresh now."),
-        stat_card(924, 274, "Bundle-ready", str(summary["bundleReadyCount"]), "Records with enough evidence to move cleanly."),
-        stat_card(1220, 274, "Exceptions", str(summary["exceptionCount"]), "Open exception pressure still attached to the lane."),
-        f"""
-  <rect x='332' y='380' width='1240' height='94' rx='20' fill='rgba(2,8,17,0.62)' stroke='rgba(255,255,255,0.06)'/>
-  <text x='356' y='410' fill='#f6c46a' font-size='10' font-family='Segoe UI' letter-spacing='3'>LEAD RECOMMENDATION</text>
-  <text x='356' y='446' fill='#dce7fb' font-size='18' font-family='Segoe UI'>{escape(summary['leadRecommendation'])}</text>
-  <rect x='332' y='500' width='604' height='356' rx='22' fill='rgba(4,9,18,0.55)' stroke='rgba(255,255,255,0.06)'/>
-  <text x='356' y='534' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>BUNDLE VELOCITY</text>
-  <text x='356' y='566' fill='#f6f8fe' font-size='20' font-family='Georgia' font-weight='700'>How much evidence packaging work the lane is carrying this week.</text>
-  {''.join(chart)}
-  <text x='356' y='816' fill='#96a9c6' font-size='12' font-family='Segoe UI'>Average evidence age: {summary['averageEvidenceAge']} days</text>
-  <text x='356' y='838' fill='#96a9c6' font-size='12' font-family='Segoe UI'>Queue pressure: {summary['urgentCount']} urgent / {summary['watchCount']} watch</text>
-  <rect x='960' y='500' width='612' height='356' rx='22' fill='rgba(4,9,18,0.55)' stroke='rgba(255,255,255,0.06)'/>
-  <text x='984' y='534' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>TOP INCIDENT BOARD</text>
-  <text x='984' y='566' fill='#f6f8fe' font-size='20' font-family='Georgia' font-weight='700'>The records that deserve evidence intervention first.</text>
-        """,
+    summary = SERVICE.summary()
+    monitor = SERVICE.health_monitor()
+    cards = []
+    card_specs = [
+        ("TOTAL SYNCS (24H)", f"{summary['totalSyncs24h']:,}", "#5d5cf6", 78),
+        ("CYBERARK LATENCY", f"{summary['cyberarkLatencyMs']}ms", "#5d5cf6", 24),
+        ("PIPELINE SUCCESS", f"{summary['pipelineSuccess']}%", "#16c784", 99),
+        ("CRITICAL ALERTS", str(summary["criticalAlerts"]), "#e7ecf3", 2),
     ]
-    y = 604
-    for row in service.incident_catalog()[:2]:
-        verdict_fill = {"healthy": "#49d79e", "watch": "#f6c46a", "critical": "#ff7987"}[row["verdict"]]
-        body.append(
+    x = 60
+    for label, value, color, progress in card_specs:
+        cards.append(
             f"""
-  <rect x='984' y='{y}' width='564' height='104' rx='18' fill='rgba(255,255,255,0.03)' stroke='rgba(255,255,255,0.05)'/>
-  <text x='1010' y='{y + 30}' fill='#f6f8fe' font-size='20' font-family='Segoe UI' font-weight='700'>{escape(row["incidentId"])}</text>
-  <text x='1010' y='{y + 52}' fill='#96a9c6' font-size='12' font-family='Segoe UI'>{escape(row["accountName"])} · {escape(row["assignmentGroup"])} · {escape(row["servicenowState"])}</text>
-  <text x='1010' y='{y + 74}' fill='#cfe0f7' font-size='12' font-family='Segoe UI'>{escape(row["topConcern"])}</text>
-  <text x='1496' y='{y + 30}' text-anchor='end' fill='{verdict_fill}' font-size='10' font-family='Segoe UI' font-weight='700' letter-spacing='2'>{escape(row["verdict"].upper())}</text>
-  <text x='1496' y='{y + 68}' text-anchor='end' fill='#f6f8fe' font-size='28' font-family='Segoe UI' font-weight='700'>{row["riskScore"]}</text>
+            <rect x='{x}' y='240' width='352' height='132' rx='22' fill='white' stroke='#dfe6f0'/>
+            <text x='{x + 24}' y='278' fill='#6f86a4' font-size='12' font-family='Segoe UI' font-weight='700'>{label}</text>
+            <text x='{x + 24}' y='328' fill='#1b2a41' font-size='40' font-family='Georgia' font-style='italic' font-weight='700'>{value}</text>
+            {_progress(x + 24, 344, 300, progress, color)}
             """
         )
-        y += 122
-    return shell(
-        "Control-plane summary for privileged-review evidence flow.",
-        "Incident count, urgent lanes, bundle velocity, and operator recommendations at a glance.",
-        "".join(body),
-        "overview",
+        x += 382
+    component_cards = []
+    x = 60
+    for component in monitor["components"]:
+        fill = "#ff5c7a" if component["status"] == "watch" else "#16c784"
+        component_cards.append(
+            f"""
+            <rect x='{x}' y='406' width='352' height='122' rx='22' fill='white' stroke='#dfe6f0'/>
+            <rect x='{x + 26}' y='434' width='64' height='64' rx='18' fill='#eef6f2'/>
+            <text x='{x + 58}' y='474' text-anchor='middle' fill='#16c784' font-size='28' font-family='Segoe UI' font-weight='700'>{escape(component["name"][0])}</text>
+            <text x='{x + 112}' y='452' fill='#1b2a41' font-size='16' font-family='Segoe UI' font-weight='700'>{escape(component["name"])}</text>
+            <text x='{x + 306}' y='452' text-anchor='end' fill='{fill}' font-size='14' font-family='Segoe UI' font-weight='700'>{component["cpu"]}% CPU</text>
+            {_progress(x + 112, 464, 208, component["cpu"], fill)}
+            <text x='{x + 112}' y='500' fill='#6f86a4' font-size='12' font-family='Segoe UI' font-weight='700'>{component["ramGb"]}GB RAM</text>
+            <text x='{x + 306}' y='500' text-anchor='end' fill='#6f86a4' font-size='12' font-family='Segoe UI' font-weight='700'>{component["networkMb"]}MB/S NET</text>
+            <circle cx='{x + 334}' cy='436' r='5' fill='#39dca1'/>
+            """
+        )
+        x += 382
+    trend_points = []
+    series = SERVICE.sync_velocity()
+    max_syncs = max(item["syncs"] for item in series)
+    base_x = 90
+    step = 124
+    for index, item in enumerate(series):
+        px = base_x + step * index
+        py = 700 - round((item["syncs"] / max_syncs) * 88)
+        trend_points.append(f"{px},{py}")
+    labels = "".join(
+        f"<text x='{90 + index * 124}' y='760' text-anchor='middle' fill='#93a5bf' font-size='12' font-family='Segoe UI'>{escape(item['hour'])}</text>"
+        for index, item in enumerate(series)
     )
-
-
-def pipeline_svg() -> str:
-    queue = build_service().pipeline_board()
-    body = [
-        """
-  <rect x='332' y='392' width='1240' height='496' rx='24' fill='rgba(10,18,33,0.88)' stroke='rgba(120,163,214,0.16)'/>
-  <text x='356' y='426' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>PIPELINE BOARD</text>
-  <text x='356' y='462' fill='#f6f8fe' font-size='24' font-family='Georgia' font-weight='700'>The incidents most likely to need evidence refresh first.</text>
-  <text x='356' y='492' fill='#96a9c6' font-size='15' font-family='Segoe UI'>ServiceNow state, CyberArk posture, and bundle readiness stay visible in the same review lane.</text>
-        """
-    ]
-    y = 530
-    for row in queue[:3]:
-        body.append(
+    distribution_rows = []
+    y = 636
+    for row in monitor["distribution"]:
+        distribution_rows.append(
             f"""
-  <rect x='356' y='{y}' width='1192' height='104' rx='18' fill='rgba(4,9,18,0.58)' stroke='rgba(255,255,255,0.05)'/>
-  <text x='384' y='{y + 32}' fill='#f6f8fe' font-size='22' font-family='Segoe UI' font-weight='700'>{escape(row["incidentId"])}</text>
-  <text x='384' y='{y + 54}' fill='#96a9c6' font-size='12' font-family='Segoe UI'>{escape(row["accountName"])} · {escape(row["assignmentGroup"])} · {escape(row["servicenowState"])}</text>
-  <text x='384' y='{y + 82}' fill='#cfe0f7' font-size='12' font-family='Segoe UI'>{escape(row["topConcern"])}</text>
-  <text x='1332' y='{y + 30}' fill='#6f83a0' font-size='10' font-family='Segoe UI' letter-spacing='2'>RISK SCORE</text>
-  <text x='1514' y='{y + 36}' text-anchor='end' fill='#f6f8fe' font-size='28' font-family='Segoe UI' font-weight='700'>{row["riskScore"]}</text>
+            <text x='1140' y='{y}' fill='white' font-size='16' font-family='Segoe UI' font-weight='700'>{escape(row["name"])}</text>
+            <text x='1510' y='{y}' text-anchor='end' fill='#8da2c7' font-size='14' font-family='Segoe UI' font-weight='700'>{row["share"]}%</text>
+            {_progress(1140, y + 16, 370, row["share"], "#5d5cf6")}
             """
         )
-        y += 122
-    return shell(
-        "Review queue for incident evidence pressure.",
-        "The incidents most likely to need evidence refresh or privileged-review escalation first.",
-        "".join(body),
-        "pipeline",
-    )
-
-
-def bundles_svg() -> str:
-    rows = []
-    y = 548
-    for item in build_service().evidence_bundles()[:4]:
-        verdict_fill = {"healthy": "#49d79e", "watch": "#f6c46a", "critical": "#ff7987"}[item["verdict"]]
-        rows.append(
-            f"""
-  <rect x='356' y='{y}' width='1192' height='112' rx='18' fill='rgba(255,255,255,0.03)' stroke='rgba(255,255,255,0.05)'/>
-  <text x='382' y='{y + 30}' fill='#f6f8fe' font-size='20' font-family='Segoe UI' font-weight='700'>{escape(item["incidentId"])}</text>
-  <text x='382' y='{y + 52}' fill='#96a9c6' font-size='12' font-family='Segoe UI'>{escape(item["accountName"])} · {escape(item["targetSystem"])} · {escape(item["assignmentGroup"])}</text>
-  <text x='382' y='{y + 78}' fill='#cfe0f7' font-size='12' font-family='Segoe UI'>{escape(", ".join(item["requiredEvidence"]))}</text>
-  <text x='1496' y='{y + 34}' text-anchor='end' fill='{verdict_fill}' font-size='10' font-family='Segoe UI' font-weight='700' letter-spacing='2'>{escape(item["verdict"].upper())}</text>
-  <text x='1496' y='{y + 78}' text-anchor='end' fill='#f6f8fe' font-size='14' font-family='Segoe UI'>{'READY' if item["bundleReady"] else 'NEEDS WORK'}</text>
-            """
-        )
-        y += 130
+        y += 64
     body = f"""
-  <rect x='332' y='392' width='1240' height='496' rx='24' fill='rgba(10,18,33,0.88)' stroke='rgba(120,163,214,0.16)'/>
-  <text x='356' y='426' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>EVIDENCE BUNDLES</text>
-  <text x='356' y='462' fill='#f6f8fe' font-size='24' font-family='Georgia' font-weight='700'>Every incident becomes a reusable packet, not just a ticket comment.</text>
-  <text x='356' y='492' fill='#96a9c6' font-size='15' font-family='Segoe UI'>Bundle output preserves the governance targets and required evidence so the record can move cleanly downstream.</text>
-  {''.join(rows)}
+      {''.join(cards)}
+      {''.join(component_cards)}
+      <rect x='60' y='560' width='980' height='288' rx='24' fill='white' stroke='#dfe6f0'/>
+      <text x='88' y='598' fill='#7c8ea9' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='2'>SYNC VOLUME TRENDS</text>
+      <polyline fill='none' stroke='#5d5cf6' stroke-width='4' stroke-linecap='round' stroke-linejoin='round' points='{' '.join(trend_points)}'/>
+      <polygon fill='rgba(93,92,246,0.08)' points='{' '.join(trend_points)} 834,720 90,720'/>
+      <line x1='90' y1='624' x2='1000' y2='624' stroke='#dfe5ee' stroke-dasharray='5 8'/>
+      <line x1='90' y1='672' x2='1000' y2='672' stroke='#dfe5ee' stroke-dasharray='5 8'/>
+      <line x1='90' y1='720' x2='1000' y2='720' stroke='#dfe5ee' stroke-dasharray='5 8'/>
+      {labels}
+      <rect x='1072' y='560' width='480' height='288' rx='24' fill='#141d34'/>
+      <text x='1100' y='598' fill='#8da2c7' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='2'>NODE DISTRIBUTION</text>
+      {''.join(distribution_rows)}
+      <text x='1100' y='810' fill='#8da2c7' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='2'>ACTIVE PROCESSES</text>
+      <text x='1508' y='810' text-anchor='end' fill='#16d48f' font-size='24' font-family='Segoe UI' font-weight='700'>{monitor["totals"]["activeProcesses"]} UNITS</text>
+      <rect x='60' y='872' width='1492' height='40' rx='20' fill='#f8fbff' stroke='#e5ebf3'/>
+      <text x='90' y='898' fill='#5d5cf6' font-size='12' font-family='Segoe UI' font-weight='700'>Connected to: ServiceNow-Instance-01</text>
+      <text x='1508' y='898' text-anchor='end' fill='#16c784' font-size='12' font-family='Segoe UI' font-weight='700'>Worker Node #12 Health: Excellent</text>
     """
-    return shell(
-        "Evidence bundles for incident closure and audit workflows.",
-        "A packaging surface for turning ServiceNow and CyberArk context into review-safe records.",
-        body,
-        "bundles",
-    )
+    return _page_shell("dashboard", "Control-room summary for the ServiceNow → CyberArk bridge.", body, "overview")
+
+
+def monitor_svg() -> str:
+    monitor = SERVICE.health_monitor()
+    cards = []
+    positions = [(80, 248), (420, 248), (80, 456), (420, 456)]
+    for component, (x, y) in zip(monitor["components"], positions):
+        fill = "#ff5c7a" if component["status"] == "watch" else "#5d5cf6"
+        cards.append(
+            f"""
+            <rect x='{x}' y='{y}' width='300' height='172' rx='22' fill='#f7f9fd' stroke='#e3eaf3'/>
+            <rect x='{x + 30}' y='{y + 30}' width='54' height='54' rx='16' fill='white' stroke='#e5ebf3'/>
+            <text x='{x + 57}' y='{y + 66}' text-anchor='middle' fill='#5d5cf6' font-size='24' font-family='Segoe UI' font-weight='700'>{escape(component["name"][0])}</text>
+            <text x='{x + 110}' y='{y + 66}' fill='#1b2a41' font-size='16' font-family='Segoe UI' font-weight='700'>{escape(component["name"])}</text>
+            <text x='{x + 270}' y='{y + 100}' text-anchor='end' fill='#647b99' font-size='12' font-family='Segoe UI' font-weight='700'>{component["cpu"]}%</text>
+            <text x='{x + 30}' y='{y + 100}' fill='#94a6c0' font-size='11' font-family='Segoe UI' font-weight='700'>CPU LOAD</text>
+            {_progress(x + 30, y + 110, 240, component["cpu"], fill)}
+            <rect x='{x + 30}' y='{y + 130}' width='74' height='44' rx='12' fill='white' stroke='#e5ebf3'/>
+            <rect x='{x + 114}' y='{y + 130}' width='74' height='44' rx='12' fill='white' stroke='#e5ebf3'/>
+            <rect x='{x + 198}' y='{y + 130}' width='74' height='44' rx='12' fill='white' stroke='#e5ebf3'/>
+            <text x='{x + 67}' y='{y + 149}' text-anchor='middle' fill='#94a6c0' font-size='10' font-family='Segoe UI' font-weight='700'>MEMORY</text>
+            <text x='{x + 67}' y='{y + 166}' text-anchor='middle' fill='#1b2a41' font-size='12' font-family='Segoe UI' font-weight='700'>{component["ramGb"]}GB</text>
+            <text x='{x + 151}' y='{y + 149}' text-anchor='middle' fill='#94a6c0' font-size='10' font-family='Segoe UI' font-weight='700'>N/W I/O</text>
+            <text x='{x + 151}' y='{y + 166}' text-anchor='middle' fill='#1b2a41' font-size='12' font-family='Segoe UI' font-weight='700'>{component["networkMb"]}MB/S</text>
+            <text x='{x + 235}' y='{y + 149}' text-anchor='middle' fill='#94a6c0' font-size='10' font-family='Segoe UI' font-weight='700'>ERRORS</text>
+            <text x='{x + 235}' y='{y + 166}' text-anchor='middle' fill='#16c784' font-size='12' font-family='Segoe UI' font-weight='700'>{component["errorRate"]}%</text>
+            """
+        )
+    body = f"""
+      <rect x='60' y='200' width='1480' height='720' rx='32' fill='white' stroke='#dfe6f0'/>
+      <rect x='1040' y='248' width='420' height='468' rx='24' fill='#141d34'/>
+      <text x='1100' y='284' fill='white' font-size='18' font-family='Segoe UI' font-weight='700'>System Health Monitor</text>
+      <text x='1100' y='308' fill='#8fa1bf' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='2'>REAL-TIME INFRASTRUCTURE TELEMETRY</text>
+      <text x='1100' y='356' fill='#8da2c7' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='2'>AGGREGATE RESOURCE POOL</text>
+      <polyline fill='none' stroke='#ff4fa0' stroke-width='4' points='1088,520 1160,498 1232,510 1304,420 1376,392 1448,448'/>
+      <polyline fill='none' stroke='#6c63ff' stroke-width='4' points='1088,540 1160,512 1232,530 1304,436 1376,388 1448,520'/>
+      <text x='1100' y='598' fill='#8fa1bf' font-size='11' font-family='Segoe UI' font-weight='700'>AVG CPU</text>
+      <text x='1100' y='632' fill='white' font-size='24' font-family='Segoe UI' font-weight='700'>{monitor["totals"]["avgCpu"]}%</text>
+      <text x='1240' y='598' fill='#8fa1bf' font-size='11' font-family='Segoe UI' font-weight='700'>AVG MEM</text>
+      <text x='1240' y='632' fill='white' font-size='24' font-family='Segoe UI' font-weight='700'>{monitor["totals"]["avgMemGb"]}GB</text>
+      <text x='1380' y='598' fill='#16d48f' font-size='11' font-family='Segoe UI' font-weight='700'>NOMINAL</text>
+      {''.join(cards)}
+    """
+    return _page_shell("monitor", "Real-time infrastructure telemetry behind the evidence bridge.", body, "overview")
+
+
+def architecture_svg() -> str:
+    architecture = SERVICE.security_architecture()
+    body = f"""
+      <rect x='60' y='220' width='1040' height='700' rx='24' fill='white' stroke='#dfe6f0'/>
+      <text x='92' y='258' fill='#1b2a41' font-size='18' font-family='Segoe UI' font-weight='700'>SYSTEM ARCHITECTURE DIAGRAM</text>
+      <rect x='136' y='520' width='156' height='156' rx='24' fill='white' stroke='#dfe6ff'/>
+      <text x='214' y='604' text-anchor='middle' fill='#5d5cf6' font-size='52' font-family='Segoe UI' font-weight='700'>◫</text>
+      <text x='214' y='732' text-anchor='middle' fill='#1b2a41' font-size='20' font-family='Segoe UI' font-weight='700'>SERVICENOW</text>
+      <text x='214' y='758' text-anchor='middle' fill='#6f86a4' font-size='12' font-family='Segoe UI'>ITSM / GRC MODULE</text>
+      <circle cx='300' cy='504' r='12' fill='#16c784'/>
+      <rect x='458' y='470' width='250' height='250' rx='125' fill='#f7f8ff' stroke='#dfe6ff'/>
+      <rect x='528' y='536' width='110' height='110' rx='28' fill='#5d5cf6'/>
+      <text x='583' y='603' text-anchor='middle' fill='white' font-size='56' font-family='Segoe UI' font-weight='700'>▣</text>
+      <text x='583' y='736' text-anchor='middle' fill='#5d5cf6' font-size='22' font-family='Segoe UI' font-weight='700'>EVIDENCE PIPELINE</text>
+      <text x='583' y='762' text-anchor='middle' fill='#6f86a4' font-size='12' font-family='Segoe UI'>FASTAPI CORE</text>
+      <rect x='880' y='500' width='164' height='164' rx='24' fill='#172038'/>
+      <text x='962' y='590' text-anchor='middle' fill='#20d698' font-size='52' font-family='Segoe UI' font-weight='700'>◔</text>
+      <text x='962' y='720' text-anchor='middle' fill='#1b2a41' font-size='20' font-family='Segoe UI' font-weight='700'>CYBERARK VAULT</text>
+      <text x='962' y='746' text-anchor='middle' fill='#6f86a4' font-size='12' font-family='Segoe UI'>PAM ENTERPRISE</text>
+      <circle cx='1032' cy='482' r='12' fill='#16c784'/>
+      <line x1='292' y1='596' x2='458' y2='596' stroke='#d7dff0' stroke-width='4'/>
+      <line x1='708' y1='596' x2='880' y2='596' stroke='#d7dff0' stroke-width='4'/>
+      <polygon points='862,590 880,596 862,602' fill='#8db0d6'/>
+      <rect x='1140' y='220' width='400' height='210' rx='24' fill='white' stroke='#dfe6f0'/>
+      <text x='1180' y='266' fill='#1b2a41' font-size='18' font-family='Segoe UI' font-weight='700'>CREDENTIAL MGMT</text>
+      <rect x='1180' y='300' width='320' height='84' rx='18' fill='#f7f9fd' stroke='#e7edf6'/>
+      <text x='1204' y='330' fill='#1b2a41' font-size='16' font-family='Segoe UI' font-weight='700'>{escape(architecture["credentials"][0]["title"])}</text>
+      <text x='1204' y='356' fill='#6f86a4' font-size='13' font-family='Segoe UI'>{escape(architecture["credentials"][0]["detail"])}</text>
+      <rect x='1140' y='456' width='400' height='210' rx='24' fill='white' stroke='#dfe6f0'/>
+      <text x='1180' y='502' fill='#1b2a41' font-size='18' font-family='Segoe UI' font-weight='700'>TRANSIT SECURITY</text>
+      {''.join(f"<text x='1206' y='{550 + index * 40}' fill='#16c784' font-size='14' font-family='Segoe UI'>◉</text><text x='1234' y='{550 + index * 40}' fill='#1b2a41' font-size='14' font-family='Segoe UI'>{escape(item)}</text>" for index, item in enumerate(architecture['transitControls']))}
+      <rect x='1140' y='692' width='400' height='228' rx='24' fill='#141d34'/>
+      <text x='1180' y='738' fill='white' font-size='18' font-family='Segoe UI' font-weight='700'>ACCESS CONTROL</text>
+      <text x='1180' y='786' fill='#8fa1bf' font-size='14' font-family='Segoe UI' font-weight='700'>{escape(architecture["accessRoles"][0]["name"])}</text>
+      <text x='1180' y='812' fill='#b9c5dc' font-size='13' font-family='Segoe UI'>{escape(architecture["accessRoles"][0]["detail"])}</text>
+      <text x='1180' y='856' fill='#8fa1bf' font-size='14' font-family='Segoe UI' font-weight='700'>{escape(architecture["accessRoles"][1]["name"])}</text>
+      <text x='1180' y='882' fill='#b9c5dc' font-size='13' font-family='Segoe UI'>{escape(architecture["accessRoles"][1]["detail"])}</text>
+    """
+    return _page_shell("security & architecture", "Security review surface for credentials, transit, and role posture.", body, "architecture")
 
 
 def audit_svg() -> str:
-    logs = build_service().audit_log()
+    logs = SERVICE.audit_log()
+    terminal = SERVICE.terminal_feed()
     rows = []
-    y = 548
-    for item in logs[:4]:
-        result = "#49d79e" if item["result"] == "Success" else "#ff7987"
+    y = 286
+    for row in logs:
+        result = "#16c784" if row["result"] == "Success" else "#ff5c7a"
         rows.append(
             f"""
-  <rect x='356' y='{y}' width='1192' height='74' rx='14' fill='rgba(255,255,255,0.03)' stroke='rgba(255,255,255,0.05)'/>
-  <text x='382' y='{y + 28}' fill='#6f83a0' font-size='11' font-family='Courier New'>{escape(item["timestamp"])}</text>
-  <text x='552' y='{y + 28}' fill='#74c8ff' font-size='11' font-family='Courier New' font-weight='700'>{escape(item["action"])}</text>
-  <text x='778' y='{y + 28}' fill='#f6f8fe' font-size='12' font-family='Segoe UI' font-weight='700'>{escape(item["resource"])}</text>
-  <text x='778' y='{y + 48}' fill='#96a9c6' font-size='12' font-family='Segoe UI'>{escape(item["detail"])}</text>
-  <text x='1496' y='{y + 34}' text-anchor='end' fill='{result}' font-size='12' font-family='Segoe UI' font-weight='700'>{escape(item["result"].upper())}</text>
+            <rect x='60' y='{y}' width='1490' height='78' rx='16' fill='#182138'/>
+            <text x='86' y='{y + 30}' fill='#8fa1bf' font-size='12' font-family='Consolas'>{escape(row["timestamp"])}</text>
+            <text x='272' y='{y + 30}' fill='#6fc6ff' font-size='12' font-family='Consolas' font-weight='700'>{escape(row["action"])}</text>
+            <text x='552' y='{y + 30}' fill='white' font-size='13' font-family='Segoe UI' font-weight='700'>{escape(row["resource"])}</text>
+            <text x='552' y='{y + 52}' fill='#d9e3f5' font-size='12' font-family='Segoe UI'>{escape(row["detail"])}</text>
+            <text x='1498' y='{y + 40}' text-anchor='end' fill='{result}' font-size='12' font-family='Segoe UI' font-weight='700'>{escape(row["result"].upper())}</text>
             """
         )
         y += 92
-    body = f"""
-  <rect x='332' y='392' width='1240' height='496' rx='24' fill='rgba(10,18,33,0.88)' stroke='rgba(120,163,214,0.16)'/>
-  <text x='356' y='426' fill='#74c8ff' font-size='10' font-family='Segoe UI' letter-spacing='3'>AUDIT EVIDENCE</text>
-  <text x='356' y='462' fill='#f6f8fe' font-size='24' font-family='Georgia' font-weight='700'>A replayable log of incident pulls, enrichment, and bundle failures.</text>
-  <text x='356' y='492' fill='#96a9c6' font-size='15' font-family='Segoe UI'>The useful part is not just emitting events. It is making them legible to reviewers and auditors.</text>
-  {''.join(rows)}
-    """
-    return shell(
-        "Audit evidence for incident-to-vault packaging.",
-        "A replayable log of sync actions, bundle gaps, and review-lane escalation.",
-        body,
-        "audit",
+    terminal_lines = "".join(
+        f"<text x='110' y='{786 + index * 22}' fill='#d9e3f5' font-size='13' font-family='Consolas'>{escape(line)}</text>"
+        for index, line in enumerate(terminal[:4])
     )
+    body = f"""
+      <rect x='60' y='240' width='1490' height='520' rx='24' fill='#121a2f'/>
+      <rect x='60' y='240' width='1490' height='62' rx='24' fill='#18213a'/>
+      <circle cx='96' cy='271' r='6' fill='rgba(255,92,122,0.75)'/>
+      <circle cx='114' cy='271' r='6' fill='rgba(245,185,76,0.75)'/>
+      <circle cx='132' cy='271' r='6' fill='rgba(22,199,132,0.75)'/>
+      <text x='158' y='276' fill='#c4d0e8' font-size='12' font-family='Segoe UI' font-weight='700'>ADVANCED FORENSIC AUDIT TRAIL</text>
+      {''.join(rows)}
+      <rect x='60' y='786' width='1490' height='126' rx='24' fill='#101728'/>
+      <text x='96' y='822' fill='#c4d0e8' font-size='12' font-family='Segoe UI' font-weight='700'>OPERATOR TERMINAL</text>
+      {terminal_lines}
+    """
+    return _page_shell("audit trail", "Replayable incident pull, enrichment, and bundle failure history.", body, "audit")
 
 
 def main() -> None:
@@ -243,8 +289,8 @@ def main() -> None:
         if path.is_file():
             path.unlink()
     (OUT_DIR / "01-overview.svg").write_text(overview_svg(), encoding="utf-8")
-    (OUT_DIR / "02-pipeline-board.svg").write_text(pipeline_svg(), encoding="utf-8")
-    (OUT_DIR / "03-bundles.svg").write_text(bundles_svg(), encoding="utf-8")
+    (OUT_DIR / "02-monitor.svg").write_text(monitor_svg(), encoding="utf-8")
+    (OUT_DIR / "03-security-architecture.svg").write_text(architecture_svg(), encoding="utf-8")
     (OUT_DIR / "04-audit-log.svg").write_text(audit_svg(), encoding="utf-8")
     print("rendered screenshots")
 

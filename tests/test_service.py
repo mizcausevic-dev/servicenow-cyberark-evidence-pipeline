@@ -26,6 +26,15 @@ class EvidencePipelineTests(unittest.TestCase):
         body = response.json()
         self.assertGreaterEqual(len(body), 5)
 
+    def test_health_and_architecture_apis(self) -> None:
+        client = TestClient(app)
+        health = client.get("/api/health")
+        architecture = client.get("/api/security-architecture")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(architecture.status_code, 200)
+        self.assertIn("totals", health.json())
+        self.assertIn("nodes", architecture.json())
+
 
 if __name__ == "__main__":
     unittest.main()
