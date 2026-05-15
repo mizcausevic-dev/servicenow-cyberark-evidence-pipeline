@@ -159,7 +159,7 @@ def overview_svg() -> str:
       <text x='90' y='898' fill='#5d5cf6' font-size='12' font-family='Segoe UI' font-weight='700'>Connected to: ServiceNow-Instance-01</text>
       <text x='1508' y='898' text-anchor='end' fill='#16c784' font-size='12' font-family='Segoe UI' font-weight='700'>Worker Node #12 Health: Excellent</text>
     """
-    return _page_shell("dashboard", "Control-room summary for the ServiceNow → CyberArk bridge.", body, "overview")
+    return _page_shell("dashboard", "Bridge summary for the ServiceNow to CyberArk evidence lane.", body, "overview")
 
 
 def monitor_svg() -> str:
@@ -203,7 +203,7 @@ def monitor_svg() -> str:
       <text x='1380' y='598' fill='#16d48f' font-size='11' font-family='Segoe UI' font-weight='700'>NOMINAL</text>
       {''.join(cards)}
     """
-    return _page_shell("monitor", "Real-time infrastructure telemetry behind the evidence bridge.", body, "overview")
+    return _page_shell("monitor", "Infrastructure telemetry behind the evidence bridge.", body, "overview")
 
 
 def architecture_svg() -> str:
@@ -244,7 +244,7 @@ def architecture_svg() -> str:
       <text x='1180' y='856' fill='#8fa1bf' font-size='14' font-family='Segoe UI' font-weight='700'>{escape(architecture["accessRoles"][1]["name"])}</text>
       <text x='1180' y='882' fill='#b9c5dc' font-size='13' font-family='Segoe UI'>{escape(architecture["accessRoles"][1]["detail"])}</text>
     """
-    return _page_shell("security & architecture", "Security review surface for credentials, transit, and role posture.", body, "architecture")
+    return _page_shell("security & architecture", "Security review surface for credentials, transport, and role posture.", body, "architecture")
 
 
 def audit_svg() -> str:
@@ -281,17 +281,17 @@ def audit_svg() -> str:
       <text x='96' y='822' fill='#c4d0e8' font-size='12' font-family='Segoe UI' font-weight='700'>OPERATOR TERMINAL</text>
       {terminal_lines}
     """
-    return _page_shell("audit trail", "Replayable incident pull, enrichment, and bundle failure history.", body, "audit")
+    return _page_shell("audit trail", "Replayable incident, enrichment, and bundle failure history.", body, "audit")
 
 
 def main() -> None:
     for path in OUT_DIR.glob("*"):
         if path.is_file():
             path.unlink()
-    (OUT_DIR / "01-overview.svg").write_text(overview_svg(), encoding="utf-8")
-    (OUT_DIR / "02-monitor.svg").write_text(monitor_svg(), encoding="utf-8")
-    (OUT_DIR / "03-security-architecture.svg").write_text(architecture_svg(), encoding="utf-8")
-    (OUT_DIR / "04-audit-log.svg").write_text(audit_svg(), encoding="utf-8")
+    (OUT_DIR / "overview-dashboard-proof.svg").write_text(overview_svg(), encoding="utf-8")
+    (OUT_DIR / "system-monitor-proof.svg").write_text(monitor_svg(), encoding="utf-8")
+    (OUT_DIR / "security-architecture-proof.svg").write_text(architecture_svg(), encoding="utf-8")
+    (OUT_DIR / "audit-trail-proof.svg").write_text(audit_svg(), encoding="utf-8")
     print("rendered screenshots")
 
 

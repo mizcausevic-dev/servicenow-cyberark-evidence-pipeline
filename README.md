@@ -19,10 +19,10 @@ Most privileged-access workflows split the truth across too many systems:
 
 ## Screenshots
 
-![Overview](./screenshots/01-overview.svg)
-![System monitor](./screenshots/02-monitor.svg)
-![Security and architecture](./screenshots/03-security-architecture.svg)
-![Audit log](./screenshots/04-audit-log.svg)
+![Overview](./screenshots/overview-dashboard-proof.svg)
+![System monitor](./screenshots/system-monitor-proof.svg)
+![Security and architecture](./screenshots/security-architecture-proof.svg)
+![Audit log](./screenshots/audit-trail-proof.svg)
 
 ## What it includes
 

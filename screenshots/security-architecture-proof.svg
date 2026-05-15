@@ -24,7 +24,7 @@
   <text x='1442' y='54' fill='#14d18a' font-size='16' font-family='Segoe UI' font-weight='700'>SYSTEM ACTIVE</text>
   <rect x='28' y='124' width='1544' height='826' rx='28' fill='white' filter='url(#shadow)'/>
   <text x='60' y='168' fill='#7c8ea9' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='3'>SECURITY &amp; ARCHITECTURE</text>
-  <text x='60' y='206' fill='#1b2a41' font-size='24' font-family='Segoe UI' font-weight='700'>Security review surface for credentials, transit, and role posture.</text>
+  <text x='60' y='206' fill='#1b2a41' font-size='24' font-family='Segoe UI' font-weight='700'>Security review surface for credentials, transport, and role posture.</text>
   
       <rect x='60' y='220' width='1040' height='700' rx='24' fill='white' stroke='#dfe6f0'/>
       <text x='92' y='258' fill='#1b2a41' font-size='18' font-family='Segoe UI' font-weight='700'>SYSTEM ARCHITECTURE DIAGRAM</text>

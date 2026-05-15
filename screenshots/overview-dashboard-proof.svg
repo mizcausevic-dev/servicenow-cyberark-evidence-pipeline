@@ -24,7 +24,7 @@
   <text x='1442' y='54' fill='#14d18a' font-size='16' font-family='Segoe UI' font-weight='700'>SYSTEM ACTIVE</text>
   <rect x='28' y='124' width='1544' height='826' rx='28' fill='white' filter='url(#shadow)'/>
   <text x='60' y='168' fill='#7c8ea9' font-size='11' font-family='Segoe UI' font-weight='700' letter-spacing='3'>DASHBOARD</text>
-  <text x='60' y='206' fill='#1b2a41' font-size='24' font-family='Segoe UI' font-weight='700'>Control-room summary for the ServiceNow → CyberArk bridge.</text>
+  <text x='60' y='206' fill='#1b2a41' font-size='24' font-family='Segoe UI' font-weight='700'>Bridge summary for the ServiceNow to CyberArk evidence lane.</text>
   
       
             <rect x='60' y='240' width='352' height='132' rx='22' fill='white' stroke='#dfe6f0'/>
