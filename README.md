@@ -38,7 +38,7 @@ Most privileged-access workflows split the truth across too many systems:
 ## Local run
 
 ```powershell
-Set-Location "C:\Users\chaus\dev\repos\servicenow-cyberark-evidence-pipeline"
+cd servicenow-cyberark-evidence-pipeline
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m app.main
