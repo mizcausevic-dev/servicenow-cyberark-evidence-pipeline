@@ -4,10 +4,10 @@ ServiceNow CyberArk Evidence Pipeline is a Python + FastAPI service that models 
 
 ## Core flow
 
-1. Sample ServiceNow/CyberArk incident records live in [C:\Users\chaus\dev\repos\servicenow-cyberark-evidence-pipeline\app\data\sample_pipeline_data.json](/C:/Users/chaus/dev/repos/servicenow-cyberark-evidence-pipeline/app/data/sample_pipeline_data.json).
-2. Route handlers in [C:\Users\chaus\dev\repos\servicenow-cyberark-evidence-pipeline\app\main.py](/C:/Users/chaus/dev/repos/servicenow-cyberark-evidence-pipeline/app/main.py) expose HTML proof surfaces and JSON APIs.
-3. Packaging and scoring logic in [C:\Users\chaus\dev\repos\servicenow-cyberark-evidence-pipeline\app\services\evidence_pipeline_service.py](/C:/Users/chaus/dev/repos/servicenow-cyberark-evidence-pipeline/app/services/evidence_pipeline_service.py) converts ticket priority, evidence age, artifacts, ownership quality, exception pressure, infrastructure load, and security posture into ranked operator context.
-4. Render helpers in [C:\Users\chaus\dev\repos\servicenow-cyberark-evidence-pipeline\app\render.py](/C:/Users/chaus/dev/repos/servicenow-cyberark-evidence-pipeline/app/render.py) turn those packets into operator-readable HTML surfaces for dashboard, monitor, architecture, and audit review.
+1. Sample ServiceNow/CyberArk incident records live in [app/data/sample_pipeline_data.json](../app/data/sample_pipeline_data.json).
+2. Route handlers in [app/main.py](../app/main.py) expose HTML proof surfaces and JSON APIs.
+3. Packaging and scoring logic in [app/services/evidence_pipeline_service.py](../app/services/evidence_pipeline_service.py) converts ticket priority, evidence age, artifacts, ownership quality, exception pressure, infrastructure load, and security posture into ranked operator context.
+4. Render helpers in [app/render.py](../app/render.py) turn those packets into operator-readable HTML surfaces for dashboard, monitor, architecture, and audit review.
 5. `scripts/render_readme_assets.py` produces README proof assets from the same underlying service data so the visual layer stays aligned with the app.
 
 ## Route surface
